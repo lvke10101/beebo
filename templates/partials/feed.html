@@ -1,0 +1,50 @@
+<!-- BEGIN: Feed View -->
+<div id="feed-view" class="view-section">
+<!-- BEGIN: MainHeader & Top Navigation -->
+<header class="bg-white sticky top-0 z-10 w-full shadow-sm">
+<!-- Top Bar -->
+<div class="flex justify-between items-center px-4 py-3">
+<div id="feed-header-greeting" class="flex flex-col leading-tight">
+<h1 class="text-lg font-bold text-gray-900">Discover</h1>
+</div>
+<div class="flex items-center space-x-4">
+<!-- Search Icon -->
+<button class="text-gray-500 hover:text-gray-700 focus:outline-none">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+<!-- Notification Icon with Badge -->
+<button class="text-gray-500 hover:text-gray-700 focus:outline-none relative">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<!-- Red Dot Badge -->
+<span class="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white transform translate-x-1/4 -translate-y-1/4"></span>
+</button>
+</div>
+</div>
+<!-- Horizontal Scrollable Tabs -->
+<nav class="flex overflow-x-auto no-scrollbar border-b border-gray-100 pl-4 pt-1 pb-0 whitespace-nowrap">
+<a class="text-red-500 font-semibold px-2 py-3 border-b-2 border-red-500 mr-4 text-sm" href="#">For You</a>
+<a class="text-gray-500 font-medium px-2 py-3 hover:text-gray-700 mr-4 text-sm" href="#">Announcements</a>
+<a class="text-gray-500 font-medium px-2 py-3 hover:text-gray-700 mr-4 text-sm" href="#">Academic</a>
+<a class="text-gray-500 font-medium px-2 py-3 hover:text-gray-700 mr-4 text-sm" href="#">Events</a>
+<a class="text-gray-500 font-medium px-2 py-3 hover:text-gray-700 mr-4 text-sm" href="#">Community</a>
+<a class="text-gray-500 font-medium px-2 py-3 hover:text-gray-700 pr-4 text-sm" onclick="showView('businesses')">Businesses</a>
+</nav>
+</header>
+<!-- END: MainHeader & Top Navigation -->
+<!-- BEGIN: Main Feed Content -->
+<main class="flex-1 overflow-y-auto bg-white pb-24" id="feed-posts-container">
+<!-- Dynamic post cards are rendered here by renderFeedPosts() -->
+</main>
+<!-- END: Main Feed Content -->
+
+<!-- BEGIN: Compose FAB -->
+<button id="compose-fab" class="fixed w-14 h-14 bg-brand-red text-white rounded-full card-shadow flex items-center justify-center hover:bg-red-700 transition-colors z-9" style="bottom: 20px; right: 20px;" onclick="showView('create-post')">
+	<i class="fa-solid fa-plus text-xl"></i>
+</button>
+<!-- END: Compose FAB -->
+</div>
+<!-- END: Feed View -->

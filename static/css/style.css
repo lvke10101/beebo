@@ -1,0 +1,439 @@
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f8f9fa;
+            /* Defense-in-depth alongside the touchmove preventDefault() in
+               side-nav.js: stops Chrome/Edge's own overscroll-triggered
+               back/forward navigation from competing with the drawer's
+               left-edge swipe. Doesn't affect any in-page horizontal
+               scrolling (e.g. the category tabs, businesses list) - this
+               only governs the document's own scroll-boundary behavior. */
+            overscroll-behavior-x: none;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .post-content-clamped {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .post-content-clamped.expanded {
+            display: block;
+            -webkit-line-clamp: unset;
+            overflow: visible;
+        }
+        .card-shadow {
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.024);
+        }
+        /* Distinct from .card-shadow above (different blur/spread) - used by Courses view cards */
+        .course-card-shadow {
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+        }
+        .view-section {
+            display: none !important;
+        }
+        .view-section.active {
+            display: block !important;
+        }
+        .input-icon-container {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9CA3AF;
+        }
+        .auth-bg {
+            background: linear-gradient(180deg, #F9FAFB 0%, #FFFFFF 100%);
+        }
+        .eye-icon {
+            transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+        }
+        .eye-icon.hidden {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        /* Compose FAB styles */
+        .z-9 {
+            z-index: 9;
+        }
+        #compose-fab {
+            transition: transform 200ms ease-in-out, opacity 200ms ease-in-out;
+        }
+        #compose-fab.fab-hidden {
+            transform: translateY(100px);
+            opacity: 0;
+            pointer-events: none;
+        }
+        /* Comment overlay styles */
+        #comment-overlay {
+            transition: opacity 250ms ease-in-out, visibility 250ms ease-in-out;
+        }
+        #comment-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+        #comment-overlay .overlay-content {
+            transition: transform 250ms ease-in-out;
+            /* Explicit dynamic-viewport-height sizing instead of relying on
+               h-full (100% of #comment-overlay, itself `fixed inset-0`).
+               Paired with interactive-widget=resizes-content in the meta
+               tag (see <head>): that meta hint makes Chromium-based mobile
+               browsers actually resize the layout viewport around the
+               on-screen keyboard, so 100dvh below shrinks correctly and the
+               shrink-0 reply bar at the bottom of this flex column stays
+               above the keyboard instead of underneath it. The plain vh
+               fallback keeps behavior unchanged in browsers without dvh
+               support. */
+            height: 100vh;
+            height: 100dvh;
+        }
+        #comment-overlay.hidden .overlay-content {
+            transform: translateY(100%);
+        }
+        body.overlay-open {
+            overflow: hidden;
+        }
+        .overlay-replies-section {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Like button animation styles */
+        .like-btn, .like-btn-comment, #overlay-post-like-btn {
+            position: relative;
+        }
+
+        /* Heart icon wrapper needs overflow visible for burst */
+        .like-icon-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        /* Outline heart (default/unliked state) */
+        .heart-outline {
+            display: block;
+        }
+
+        .heart-filled {
+            display: none;
+        }
+
+        /* When liked, show filled heart */
+        .like-btn[data-liked="true"] .heart-outline,
+        .like-btn-comment[data-liked="true"] .heart-outline,
+        #overlay-post-like-btn[data-liked="true"] .heart-outline {
+            display: none;
+        }
+
+        .like-btn[data-liked="true"] .heart-filled,
+        .like-btn-comment[data-liked="true"] .heart-filled,
+        #overlay-post-like-btn[data-liked="true"] .heart-filled {
+            display: block;
+        }
+
+        /* Particle burst via ::after pseudo-element */
+        .like-icon-wrapper::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 1px;
+            height: 1px;
+            border-radius: 50%;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Animation state when liking (not on page load) */
+        .is-liking .like-icon-wrapper {
+            animation: heartPop 400ms cubic-bezier(.17,.89,.32,1.49) forwards;
+        }
+
+        .is-liking .like-icon-wrapper::after {
+            animation: particleBurst 550ms cubic-bezier(.17,.89,.32,1.49) forwards;
+        }
+
+        /* Unliking animation (simple fade/scale down) */
+        .is-unliking .like-icon-wrapper {
+            animation: heartShrink 180ms cubic-bezier(.4,0,.2,1) forwards;
+        }
+
+        /* Count number transition */
+        .like-count {
+            display: inline-block;
+            transition: opacity 140ms ease, transform 140ms ease;
+        }
+
+        .like-count.count-changing {
+            animation: countChange 140ms ease forwards;
+        }
+
+        /* Keyframes */
+        @keyframes heartPop {
+            0% {
+                transform: scale(0.8);
+            }
+            50% {
+                transform: scale(1.15);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        @keyframes heartShrink {
+            0% {
+                transform: scale(1);
+            }
+            100% {
+                transform: scale(0.9);
+                opacity: 0.8;
+            }
+        }
+
+        @keyframes particleBurst {
+            0% {
+                box-shadow:
+                    0 0 0 0 #DA292E,
+                    0 0 0 0 #DA292E,
+                    0 0 0 0 #DA292E,
+                    0 0 0 0 #DA292E,
+                    0 0 0 0 #DA292E,
+                    0 0 0 0 #DA292E,
+                    0 0 0 0 #DA292E,
+                    0 0 0 0 #DA292E;
+                opacity: 1;
+            }
+            100% {
+                box-shadow:
+                    0 -30px 0 1px #DA292E,
+                    21px -21px 0 1px #DA292E,
+                    30px 0 0 1px #DA292E,
+                    21px 21px 0 1px #DA292E,
+                    0 30px 0 1px #DA292E,
+                    -21px 21px 0 1px #DA292E,
+                    -30px 0 0 1px #DA292E,
+                    -21px -21px 0 1px #DA292E;
+                opacity: 0;
+            }
+        }
+
+        @keyframes countChange {
+            0% {
+                opacity: 0.5;
+                transform: translateY(-2px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Reduced motion: disable animations */
+        @media (prefers-reduced-motion: reduce) {
+            .is-liking .like-icon-wrapper,
+            .is-unliking .like-icon-wrapper {
+                animation: none !important;
+            }
+
+            .is-liking .like-icon-wrapper::after {
+                animation: none !important;
+                display: none !important;
+            }
+
+            .like-count.count-changing {
+                animation: none !important;
+            }
+        }
+
+        /* Star colors for business ratings */
+        .star-filled { color: #FFB400; }
+        .star-empty { color: #E5E7EB; }
+
+        /* Post action menu (three-dot) bottom sheet */
+        .post-menu-icon {
+            will-change: transform;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .post-menu-action,
+            .post-menu-icon {
+                transition: none !important;
+            }
+        }
+
+        /* Side navigation drawer: width/opacity are driven directly by
+           side-nav.js during a drag (real-time finger tracking), and
+           these transitions only take effect for the settle animation
+           after touchend, when JS re-enables them. Animating the shell's
+           WIDTH (rather than a transform) is what makes the mini rail
+           and full drawer read as one panel progressively expanding
+           through its two stops, instead of two layouts swapping. */
+        #side-nav {
+            transition: width 320ms cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        #side-nav-mini,
+        #side-nav-full {
+            transition: opacity 220ms ease;
+        }
+        #side-nav-backdrop {
+            transition: opacity 320ms cubic-bezier(0.32, 0.72, 0, 1);
+        }
+        #side-nav.side-nav-dragging,
+        #side-nav-backdrop.side-nav-dragging {
+            transition: none;
+        }
+        #side-nav.side-nav-dragging #side-nav-mini,
+        #side-nav.side-nav-dragging #side-nav-full {
+            transition: none;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #side-nav,
+            #side-nav-mini,
+            #side-nav-full,
+            #side-nav-backdrop {
+                transition: none !important;
+            }
+        }
+
+/* ==========================================================================
+   Light / Dark theme system
+   ==========================================================================
+   Beebo's Tailwind is loaded from the CDN (no build step to extend/purge),
+   so rather than retrofitting every template with `dark:` variants, theme
+   colors are defined once as CSS variables and the utility classes already
+   used throughout the app (bg-white, text-gray-500, border-gray-200, etc.)
+   are remapped to those variables whenever `<html>` has the `dark` class.
+   This covers the whole app from one file and keeps every template's
+   markup, layout, and component structure untouched.
+
+   The variables intentionally distinguish "app background" from "surface"
+   (cards/sheets/menus) and give text three weights (primary/secondary/
+   tertiary) so dark mode reads as a proper dark theme rather than a naive
+   color inversion - see the class-mapping table below for how each
+   existing Tailwind color maps onto them.
+   ========================================================================== */
+
+:root {
+    --bb-bg-app: #f8f9fa;
+    --bb-bg-surface: #ffffff;
+    --bb-bg-subtle: #f9fafb;   /* gray-50 role: page sections, hover/active fills */
+    --bb-bg-muted: #f3f4f6;    /* gray-100 role: avatar placeholders, chips */
+    --bb-bg-muted-2: #e5e7eb;  /* gray-200 role: stronger fills, dividers-as-bg */
+    --bb-text-primary: #111827;   /* gray-900 */
+    --bb-text-secondary: #1f2937; /* gray-800 */
+    --bb-text-tertiary: #4b5563;  /* gray-700/600 */
+    --bb-text-quaternary: #6b7280;/* gray-500 */
+    --bb-text-muted: #9ca3af;     /* gray-400 */
+    --bb-text-faint: #d1d5db;     /* gray-300 */
+    --bb-border-subtle: #f3f4f6;  /* gray-100 */
+    --bb-border-default: #e5e7eb; /* gray-200 / brand-border */
+    --bb-border-strong: #d1d5db;  /* gray-300 */
+    --bb-red-tint: #fef2f2;   /* red-50 */
+    --bb-red-tint-2: #fee2e2; /* red-100 */
+    --bb-cover-gradient-from: #7dd3fc; /* sky-300 */
+    --bb-cover-gradient-via: #e0f2fe;  /* sky-100 */
+}
+
+html.dark {
+    --bb-bg-app: #000000;
+    --bb-bg-surface: #0d0d0d;
+    --bb-bg-subtle: #111111;
+    --bb-bg-muted: #1a1a1a;
+    --bb-bg-muted-2: #262626;
+    --bb-text-primary: #f9fafb;
+    --bb-text-secondary: #e5e7eb;
+    --bb-text-tertiary: #d1d5db;
+    --bb-text-quaternary: #9ca3af;
+    --bb-text-muted: #71717a;
+    --bb-text-faint: #52525b;
+    --bb-border-subtle: #1f1f1f;
+    --bb-border-default: #2a2a2a;
+    --bb-border-strong: #3a3a3a;
+    --bb-red-tint: rgba(218, 41, 46, 0.16);
+    --bb-red-tint-2: rgba(218, 41, 46, 0.24);
+    --bb-cover-gradient-from: #123049;
+    --bb-cover-gradient-via: #0d0d0d;
+}
+
+html.dark body {
+    background-color: var(--bb-bg-app);
+    color-scheme: dark;
+}
+
+/* Backgrounds */
+html.dark .bg-white,
+html.dark .bg-\[\#fafafa\],
+html.dark .bg-\[\#F9F9FB\] { background-color: var(--bb-bg-surface) !important; }
+html.dark .bg-gray-50 { background-color: var(--bb-bg-subtle) !important; }
+html.dark .bg-gray-100 { background-color: var(--bb-bg-muted) !important; }
+html.dark .bg-gray-200 { background-color: var(--bb-bg-muted-2) !important; }
+html.dark .bg-red-50 { background-color: var(--bb-red-tint) !important; }
+html.dark .bg-red-100,
+html.dark .bg-red-200 { background-color: var(--bb-red-tint-2) !important; }
+html.dark .border-red-200 { border-color: rgba(218, 41, 46, 0.35) !important; }
+html.dark .text-red-700 { color: #f87171 !important; }
+html.dark .bg-teal-50 { background-color: rgba(20, 184, 166, 0.16) !important; }
+html.dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.16) !important; }
+html.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.16) !important; }
+
+/* Text */
+html.dark .text-gray-900 { color: var(--bb-text-primary) !important; }
+html.dark .text-gray-800 { color: var(--bb-text-secondary) !important; }
+html.dark .text-gray-700,
+html.dark .text-gray-600 { color: var(--bb-text-tertiary) !important; }
+html.dark .text-gray-500 { color: var(--bb-text-quaternary) !important; }
+html.dark .text-gray-400 { color: var(--bb-text-muted) !important; }
+html.dark .text-gray-300,
+html.dark .text-gray-200 { color: var(--bb-text-faint) !important; }
+html.dark .placeholder-gray-400::placeholder { color: var(--bb-text-muted) !important; }
+html.dark body.text-gray-800 { color: var(--bb-text-secondary); }
+
+/* Borders */
+html.dark .border-gray-100 { border-color: var(--bb-border-subtle) !important; }
+html.dark .border-gray-200,
+html.dark .border-brand-border { border-color: var(--bb-border-default) !important; }
+html.dark .border-gray-300 { border-color: var(--bb-border-strong) !important; }
+html.dark .border-black-200 { border-color: var(--bb-border-default) !important; }
+html.dark .ring-gray-200 { --tw-ring-color: var(--bb-border-default) !important; }
+
+/* Cover-photo placeholder gradient (profile header): a bright sky-blue
+   banner reads wrong on a dark page, so it's swapped for a muted
+   dark-to-surface gradient instead of literally inverting the hue. */
+html.dark .from-sky-300 { --tw-gradient-from: var(--bb-cover-gradient-from) var(--tw-gradient-from-position) !important; }
+html.dark .via-sky-100 { --tw-gradient-via: var(--bb-cover-gradient-via) var(--tw-gradient-via-position) !important; }
+html.dark .to-white { --tw-gradient-to: var(--bb-bg-surface) var(--tw-gradient-to-position) !important; }
+
+/* Shadows read as pure black-on-black in dark mode and disappear -
+   swap for a subtle light-edge highlight instead so cards/sheets still
+   separate from the page. */
+html.dark .card-shadow,
+html.dark [class*="shadow-"] {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* Scoped, short-lived transition for the moment of switching themes only -
+   see theme.js. Not a permanent global rule, so it never interferes with
+   unrelated hover/press transitions elsewhere in the app. */
+html.theme-transitioning,
+html.theme-transitioning body,
+html.theme-transitioning * {
+    transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease, box-shadow 200ms ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.theme-transitioning,
+    html.theme-transitioning body,
+    html.theme-transitioning * {
+        transition: none !important;
+    }
+}

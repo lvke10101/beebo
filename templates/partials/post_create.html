@@ -1,0 +1,132 @@
+<!-- BEGIN: Create Post View -->
+<div id="create-post-view" class="view-section bg-white min-h-screen flex flex-col relative">
+	<!-- BEGIN: TopAppBar -->
+	<header class="flex items-center justify-between px-4 h-14 bg-white sticky top-0 z-10 border-b border-gray-100">
+		<button aria-label="Close" class="p-2 -ml-2 text-gray-800 hover:opacity-80 transition-opacity active:scale-95 duration-100" onclick="attemptCloseCompose()">
+			<i class="fa-solid fa-xmark text-2xl"></i>
+		</button>
+		<h1 class="text-[17px] font-semibold text-gray-800 absolute left-1/2 -translate-x-1/2">Create Post</h1>
+		<button id="submit-post-btn" class="p-2 -mr-2 text-brand-red font-medium text-[16px] hover:opacity-80 transition-opacity active:scale-95 duration-100 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5" onclick="handlePostSubmit()" disabled aria-disabled="true">
+			<svg id="submit-post-spinner" class="hidden w-4 h-4 animate-spin" fill="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+				<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+			</svg>
+			<span id="submit-post-label">Post</span>
+		</button>
+	</header>
+	<!-- END: TopAppBar -->
+
+	<!-- BEGIN: Scrollable Content -->
+	<div class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 bg-white">
+		<!-- BEGIN: User Info Header -->
+		<div class="flex items-center gap-3">
+			<!-- Avatar -->
+			<div class="w-12 h-12 rounded-full overflow-hidden shrink-0">
+				<img alt="John Mike" class="w-full h-full object-cover" src="https://api.dicebear.com/9.x/avataaars/svg?seed=johnmike"/>
+			</div>
+			<!-- User Details -->
+			<div class="flex flex-col">
+				<div class="flex items-center gap-1 cursor-pointer">
+					<span class="font-semibold text-[15px] leading-tight text-gray-900">John Mike</span>
+					<i class="fa-solid fa-chevron-down text-sm text-gray-500"></i>
+				</div>
+				<button id="audience-picker-btn" type="button" class="flex items-center gap-1 text-gray-500 cursor-pointer -ml-0" onclick="toggleAudiencePicker()" aria-haspopup="true" aria-expanded="false">
+					<span id="audience-label" class="text-[14px] leading-tight">Academic</span>
+					<i class="fa-solid fa-chevron-down text-xs text-gray-500"></i>
+				</button>
+			</div>
+		</div>
+		<!-- END: User Info Header -->
+
+		<!-- BEGIN: Text Input Area -->
+		<textarea id="create-post-textarea" maxlength="1000" aria-label="Post content" class="w-full flex-1 resize-none border-none focus:ring-0 p-0 text-[18px] text-gray-800 placeholder:text-gray-400 bg-transparent leading-relaxed" placeholder="What's your question or thought?"></textarea>
+		<!-- END: Text Input Area -->
+
+		<!-- BEGIN: Media Preview Grid -->
+		<div id="media-preview-grid" class="hidden grid grid-cols-4 gap-2"></div>
+		<!-- END: Media Preview Grid -->
+
+		<div id="create-post-error" role="alert" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm"></div>
+
+		<!-- BEGIN: Character Counter -->
+		<div id="char-counter" class="hidden text-right text-xs text-gray-400 -mt-2 tabular-nums">0/1000</div>
+		<!-- END: Character Counter -->
+	</div>
+	<!-- END: Scrollable Content -->
+
+	<!-- BEGIN: Add Menu Popover -->
+	<div id="add-menu-backdrop" class="hidden fixed inset-0 z-30" onclick="closeAddMenu()"></div>
+	<div id="add-menu-popover" class="hidden absolute z-40 bottom-[68px] left-4 bg-white rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-gray-100 py-2 w-56 origin-bottom-left">
+		<button type="button" class="w-full flex items-center gap-3 px-4 py-3 text-left text-[15px] text-gray-800 hover:bg-gray-50 transition-colors" onclick="triggerMediaPicker()">
+			<i class="fa-solid fa-image text-gray-500 w-5 text-center"></i> Photo
+		</button>
+		<button type="button" disabled class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left text-[15px] text-gray-300 cursor-not-allowed">
+			<span class="flex items-center gap-3"><i class="fa-solid fa-square-poll-vertical text-gray-300 w-5 text-center"></i> Poll</span>
+			<span class="text-[11px] font-medium bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">Soon</span>
+		</button>
+		<button type="button" disabled class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left text-[15px] text-gray-300 cursor-not-allowed">
+			<span class="flex items-center gap-3"><i class="fa-solid fa-link text-gray-300 w-5 text-center"></i> Link</span>
+			<span class="text-[11px] font-medium bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">Soon</span>
+		</button>
+	</div>
+	<!-- END: Add Menu Popover -->
+
+	<input type="file" id="media-file-input" accept="image/*" multiple class="hidden" onchange="handleMediaFilesSelected(event)"/>
+
+	<!-- BEGIN: Audience Picker Bottom Sheet -->
+	<div id="audience-backdrop" class="hidden fixed inset-0 z-40 bg-black/20 transition-opacity" onclick="toggleAudiencePicker()"></div>
+	<div id="audience-sheet" class="hidden fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-[24px] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] p-4 pb-6 max-w-[430px] mx-auto transition-transform origin-bottom" role="dialog" aria-modal="true" aria-label="Choose post category">
+		<div class="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-5"></div>
+		<h3 class="text-sm font-bold text-gray-500 mb-3 px-1">Post to</h3>
+		<div class="flex flex-col" id="audience-options-list">
+			<button type="button" class="audience-option flex items-center justify-between px-3 py-3 rounded-xl hover:bg-gray-50 text-[15px] text-gray-800 text-left" data-value="Academic" onclick="selectAudience('Academic')">
+				Academic
+				<i class="fa-solid fa-check text-brand-red hidden"></i>
+			</button>
+			<button type="button" class="audience-option flex items-center justify-between px-3 py-3 rounded-xl hover:bg-gray-50 text-[15px] text-gray-800 text-left" data-value="Announcements" onclick="selectAudience('Announcements')">
+				Announcements
+				<i class="fa-solid fa-check text-brand-red hidden"></i>
+			</button>
+			<button type="button" class="audience-option flex items-center justify-between px-3 py-3 rounded-xl hover:bg-gray-50 text-[15px] text-gray-800 text-left" data-value="Events" onclick="selectAudience('Events')">
+				Events
+				<i class="fa-solid fa-check text-brand-red hidden"></i>
+			</button>
+			<button type="button" class="audience-option flex items-center justify-between px-3 py-3 rounded-xl hover:bg-gray-50 text-[15px] text-gray-800 text-left" data-value="Community" onclick="selectAudience('Community')">
+				Community
+				<i class="fa-solid fa-check text-brand-red hidden"></i>
+			</button>
+			<button type="button" class="audience-option flex items-center justify-between px-3 py-3 rounded-xl hover:bg-gray-50 text-[15px] text-gray-800 text-left" data-value="General" onclick="selectAudience('General')">
+				General
+				<i class="fa-solid fa-check text-brand-red hidden"></i>
+			</button>
+		</div>
+	</div>
+	<!-- END: Audience Picker Bottom Sheet -->
+
+	<!-- BEGIN: Discard Confirm Dialog -->
+	<div id="discard-backdrop" class="hidden fixed inset-0 z-50 bg-black/30"></div>
+	<div id="discard-dialog" class="hidden fixed inset-0 z-50 flex items-center justify-center px-8" role="alertdialog" aria-modal="true" aria-labelledby="discard-dialog-title">
+		<div class="bg-white rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.16)] w-full max-w-[320px] p-5 text-center">
+			<h3 id="discard-dialog-title" class="text-[16px] font-semibold text-gray-900 mb-1">Discard post?</h3>
+			<p class="text-sm text-gray-500 mb-5">Your draft will be saved so you can pick it up later, or you can discard it for good.</p>
+			<div class="flex flex-col gap-2">
+				<button type="button" class="w-full py-3 rounded-xl bg-red-50 text-brand-red font-semibold text-[15px] hover:bg-red-100 transition-colors" onclick="confirmDiscardPost()">Discard</button>
+				<button type="button" class="w-full py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[15px] hover:bg-gray-200 transition-colors" onclick="saveDraftAndClose()">Save as draft</button>
+				<button type="button" class="w-full py-3 text-gray-400 font-medium text-[15px]" onclick="closeDiscardDialog()">Keep editing</button>
+			</div>
+		</div>
+	</div>
+	<!-- END: Discard Confirm Dialog -->
+
+	<!-- BEGIN: BottomToolbar -->
+	<footer class="h-16 border-t border-gray-100 bg-white w-full flex items-center px-4 gap-4 sticky bottom-0 z-10 shrink-0">
+		<button id="add-menu-trigger" aria-label="Add to your post" aria-haspopup="true" aria-expanded="false" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-800 hover:bg-gray-200 transition-colors active:scale-95 duration-100 shrink-0" onclick="toggleAddMenu()">
+			<i class="fa-solid fa-plus text-lg"></i>
+		</button>
+		<span id="media-toolbar-label" class="text-[15px] text-gray-400 cursor-pointer flex-1 truncate" onclick="toggleAddMenu()">
+			Add media, poll, link...
+		</span>
+	</footer>
+	<!-- END: BottomToolbar -->
+</div>
+<!-- END: Create Post View -->
