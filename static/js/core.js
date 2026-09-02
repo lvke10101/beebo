@@ -39,7 +39,7 @@ function apiFetch(url, options = {}) {
 // responding to a browser Back/Forward navigation doesn't push a second,
 // redundant history entry on top of the one the browser just navigated to.
 function showView(viewName, { skipUrlSync = false } = {}) {
-    const views = ['login', 'signup', 'feed', 'profile', 'edit-profile', 'user-profile', 'create-post', 'businesses', 'courses', 'gpa-calculator', 'chat'];
+    const views = ['login', 'signup', 'feed', 'profile', 'edit-profile', 'user-profile', 'create-post', 'businesses', 'courses', 'gpa-calculator', 'chat', 'library', 'library-contribute'];
     views.forEach(v => {
         const view = document.getElementById(v + '-view');
         if (view) {
@@ -117,6 +117,16 @@ function showView(viewName, { skipUrlSync = false } = {}) {
     if (viewName === 'chat') {
         initChatView();
     }
+
+    // Refresh the file list + department counts each time Library is shown
+    if (viewName === 'library') {
+        initLibraryView();
+    }
+
+    // Reset the upload wizard to step 1 each time Contribute is opened
+    if (viewName === 'library-contribute') {
+        resetLibraryContributeWizard();
+    }
 }
 
 // Update bottom navigation visibility and active states
@@ -128,12 +138,14 @@ function showView(viewName, { skipUrlSync = false } = {}) {
 function updateBottomNav(viewName) {
     const composeFab = document.getElementById('compose-fab');
     const gpaFab = document.getElementById('gpa-fab');
+    const libraryFab = document.getElementById('library-contribute-fab');
 
-    // gpa-calculator is a true full-screen takeover: neither FAB should
-    // render behind/around it.
+    // gpa-calculator is a true full-screen takeover: no FAB should render
+    // behind/around it.
     if (viewName === 'gpa-calculator') {
         if (composeFab) composeFab.classList.add('hidden');
         if (gpaFab) gpaFab.classList.add('hidden');
+        if (libraryFab) libraryFab.classList.add('hidden');
         return;
     }
 
@@ -152,6 +164,16 @@ function updateBottomNav(viewName) {
             gpaFab.classList.remove('hidden');
         } else {
             gpaFab.classList.add('hidden');
+        }
+    }
+
+    // Show Contribute FAB only on the Library home view (not the
+    // Contribute wizard itself, which has its own footer buttons)
+    if (libraryFab) {
+        if (viewName === 'library') {
+            libraryFab.classList.remove('hidden');
+        } else {
+            libraryFab.classList.add('hidden');
         }
     }
 }

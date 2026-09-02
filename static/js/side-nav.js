@@ -88,7 +88,9 @@ function applySideNavActiveState() {
 		'feed-view': 'home',
 		'courses-view': 'courses',
 		'profile-view': 'profile',
-		'chat-view': 'chat'
+		'chat-view': 'chat',
+		'library-view': 'library',
+		'library-contribute-view': 'library'
 	};
 	const activeKey = activeView ? viewToKey[activeView.id] : null;
 
