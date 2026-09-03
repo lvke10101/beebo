@@ -47,7 +47,7 @@ function getSideNavEls() {
 // screens with nowhere for a "back to feed/profile" drawer to send you.
 // This list mirrors the one updateBottomNav() used to gate the (now
 // removed) bottom nav bar on in core.js.
-const SIDE_NAV_ELIGIBLE_VIEWS = ['feed-view', 'profile-view', 'courses-view', 'businesses-view', 'chat-view'];
+const SIDE_NAV_ELIGIBLE_VIEWS = ['feed-view', 'profile-view', 'courses-view', 'businesses-view', 'chat-view', 'library-view'];
 
 function sideNavAvailable() {
 	const activeView = document.querySelector('.view-section.active');
