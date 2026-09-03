@@ -184,4 +184,40 @@ def init_db():
     ''')
 
     conn.commit()
+
+    # Library files table for document uploads
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS library_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            department TEXT,
+            course TEXT,
+            level TEXT,
+            file_path TEXT NOT NULL,
+            file_type TEXT NOT NULL,
+            file_size INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'approved' CHECK(status IN ('pending','approved','rejected')),
+            download_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+
+    # Indexes for library_files
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_library_files_department ON library_files(department)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_library_files_category ON library_files(category)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_library_files_created ON library_files(created_at)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_library_files_status ON library_files(status)
+    ''')
+
+    conn.commit()
     conn.close()

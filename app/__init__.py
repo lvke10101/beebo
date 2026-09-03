@@ -44,8 +44,8 @@ def create_app():
     app.config['SESSION_USE_SIGNER'] = True
     Session(app)
 
-    # Set maximum upload size (30MB) - must be above MAX_HIGHLIGHT_SIZE
-    app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
+    # Set maximum upload size (50MB) - raised for library file uploads
+    app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
     # Print database path
     from app.db import get_db_path
@@ -56,10 +56,11 @@ def create_app():
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
     # Register blueprints
-    from app.routes import auth, posts, users
+    from app.routes import auth, posts, users, library
     app.register_blueprint(auth.bp)
     app.register_blueprint(posts.bp)
     app.register_blueprint(users.bp)
+    app.register_blueprint(library.bp)
 
     # CSRF protection: validate token on mutating requests
     @app.before_request

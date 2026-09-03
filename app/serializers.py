@@ -114,3 +114,30 @@ def serialize_user_public(row):
         'username': username,
         'bio': bio
     }
+
+
+def serialize_library_file(row, uploader_name=None):
+    """Convert a library_files row into a JSON-serializable dict.
+
+    Args:
+        row: tuple from library_files (may or may not include joined user data)
+        uploader_name: string, the uploader's display name (full_name)
+    """
+    (file_id, user_id, title, category, department, course, level,
+     file_path, file_type, file_size, status, download_count, created_at) = row[:13]
+
+    return {
+        'id': file_id,
+        'title': title,
+        'category': category,
+        'department': department or '',
+        'course': course or '',
+        'level': level or '',
+        'file_type': file_type,
+        'file_size': file_size,
+        'status': status,
+        'uploader_id': user_id,
+        'uploader_name': uploader_name or '',
+        'created_at': created_at,
+        'download_count': download_count
+    }
