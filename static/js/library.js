@@ -24,7 +24,8 @@ const LIBRARY_DEPARTMENT_META = {
     'Computer Science': { icon: 'fa-laptop', color: 'text-blue-500', bg: 'bg-blue-50' },
     'Biochemistry': { icon: 'fa-flask', color: 'text-green-500', bg: 'bg-green-50' },
     'Mathematics': { icon: 'fa-calculator', color: 'text-purple-500', bg: 'bg-purple-50' },
-    'Physics': { icon: 'fa-atom', color: 'text-orange-500', bg: 'bg-orange-50' }
+    'Physics': { icon: 'fa-atom', color: 'text-orange-500', bg: 'bg-orange-50' },
+    'Forensic Science': { icon: 'fa-fingerprint', color: 'text-indigo-500', bg: 'bg-indigo-50' }
 };
 const LIBRARY_DEFAULT_DEPARTMENT_META = { icon: 'fa-graduation-cap', color: 'text-gray-500', bg: 'bg-gray-50' };
 
