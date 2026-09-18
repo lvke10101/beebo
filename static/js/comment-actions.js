@@ -39,6 +39,32 @@ document.addEventListener('click', function(e) {
 	startReplyTo(commentRow.dataset.commentId, commentRow.dataset.commentAuthorHandle);
 });
 
+// ---- Reply-thread collapse/expand ----
+// Toggles a comment's own .comment-children subtree (its whole nested
+// reply chain, since deeper replies live inside it as real DOM
+// descendants - no separate grandchild handling needed). State is tracked
+// in collapsedCommentIds (comments.js) so it survives sort switches and
+// insert/delete re-renders within the same post's overlay.
+document.addEventListener('click', function(e) {
+	const toggleBtn = e.target.closest('.comment-replies-toggle');
+	if (!toggleBtn) return;
+
+	const thread = toggleBtn.closest('.comment-thread');
+	const childrenWrap = thread ? thread.querySelector(':scope > .comment-children') : null;
+	if (!childrenWrap) return;
+
+	const nowCollapsed = childrenWrap.classList.toggle('collapsed');
+	toggleBtn.classList.toggle('is-collapsed', nowCollapsed);
+	toggleBtn.setAttribute('aria-expanded', String(!nowCollapsed));
+
+	const commentId = toggleBtn.dataset.commentId;
+	if (nowCollapsed) {
+		collapsedCommentIds.add(String(commentId));
+	} else {
+		collapsedCommentIds.delete(String(commentId));
+	}
+});
+
 // ---- Per-comment "..." menu (Reply / Copy / Report / Delete) ----
 // Same bottom-sheet convention as the feed card's post-menu-sheet. Delete is
 // ownership-gated against data-comment-user-id and re-checked server-side.
@@ -126,20 +152,29 @@ function closeDeleteCommentDialog() {
 }
 
 // Removes a comment row from the DOM and reconciles every comment-count
-// display (overlay heading, overlay stat, feed/profile cards) against the
-// number of rows actually left — same convention as removePostFromDom.
+// display (overlay Comments badge, overlay stat, feed/profile cards) against
+// the number of rows actually left — same convention as removePostFromDom.
+// Removes a comment row and reconciles every comment-count display (overlay
+// Comments badge, overlay stat, feed/profile cards) against the number of
+// rows actually left - same convention as removePostFromDom. Re-renders
+// the whole list from the updated cache rather than patching the DOM
+// in place: deleting a mid-thread reply can leave a *different* row as
+// the new last-in-thread (needing a connector bar added) or as the new
+// only-row (needing one removed), and comment lists are small enough that
+// a full re-render is simpler and safer than enumerating those cases by
+// hand.
 function removeCommentFromDom(commentId) {
-	const row = document.querySelector(`[data-comment-id="${commentId}"]`);
-	if (row) row.remove();
+	currentPostComments = currentPostComments.filter(function(c) { return String(c.id) !== String(commentId); });
+	collapsedCommentIds.delete(String(commentId));
 
-	const container = document.getElementById('overlay-comments-container');
-	const remaining = container.querySelectorAll('[data-comment-id]').length;
+	const remaining = currentPostComments.length;
+	renderComments(sortTopLevelComments(currentPostComments, currentCommentSort));
 
 	if (remaining === 0) {
 		document.getElementById('overlay-empty').classList.remove('hidden');
 	}
 
-	document.getElementById('overlay-replies-heading').textContent = `Replies (${remaining})`;
+	document.getElementById('overlay-comments-count-badge').textContent = remaining;
 	document.getElementById('overlay-post-comments').textContent = remaining;
 
 	document.querySelectorAll(`article[data-post-id="${currentPostId}"]`).forEach(function(feedCard) {
@@ -280,10 +315,14 @@ async function handleSendReply() {
 
 		insertNewCommentIntoDom(data, parentCommentId, parentHandle);
 
-		// Update replies heading
+		// Keep the cached raw list in sync so subsequent re-sorts (Relevant/
+		// Oldest/Newest) include the just-posted comment too.
+		currentPostComments.push(data);
+
+		// Update comment count (badge in the Comments pill + post header)
 		const currentCount = parseInt(document.getElementById('overlay-post-comments').textContent);
 		const newCount = currentCount + 1;
-		document.getElementById('overlay-replies-heading').textContent = `Replies (${newCount})`;
+		document.getElementById('overlay-comments-count-badge').textContent = newCount;
 		document.getElementById('overlay-post-comments').textContent = newCount;
 
 		// Update comment count on every rendered instance of this card
@@ -315,7 +354,7 @@ async function updateSessionInfo() {
 		setCsrfTokenFromResponseData(data);
 		if (data.logged_in) {
 			session = data;
-			updateGreeting();
+			updateFeedHeaderAvatar();
 		} else {
 			session = null;
 		}
@@ -324,38 +363,15 @@ async function updateSessionInfo() {
 	}
 }
 
-// Get time-of-day greeting based on local device time
-function getGreeting() {
-	const hour = new Date().getHours();
-	if (hour < 12) {
-		return 'Good morning';
-	} else if (hour < 18) {
-		return 'Good afternoon';
-	} else {
-		return 'Good evening';
-	}
-}
+// Populate the feed header avatar (top-left, opens the side nav)
+function updateFeedHeaderAvatar() {
+	const avatarEl = document.getElementById('feed-header-avatar');
+	if (!avatarEl) return;
 
-// Update the greeting in the feed header
-function updateGreeting() {
-	const greetingContainer = document.getElementById('feed-header-greeting');
-	if (!greetingContainer) return;
+	if (!session || !session.user) return;
 
-	// If logged out or no full_name, show "Discover" as fallback
-	if (!session || !session.user || !session.user.full_name) {
-		greetingContainer.innerHTML = '<h1 class="text-lg font-bold text-gray-900">Discover</h1>';
-		return;
-	}
-
-	// Extract first name from full_name
-	const firstName = session.user.full_name.split(' ')[0];
-	const greeting = getGreeting();
-
-	// Update with two-line greeting
-	greetingContainer.innerHTML = `
-		<div class="text-lg font-bold text-gray-900 leading-tight">${greeting}</div>
-		<div class="text-sm font-medium text-gray-500 leading-tight">${firstName}</div>
-	`;
+	const handle = session.user.username || session.user.email.split('@')[0];
+	avatarEl.src = session.user.profile_picture || `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(handle)}`;
 }
 
 // Update session on load and after login/signup
@@ -563,6 +579,122 @@ document.addEventListener('click', async function(e) {
 			heartOutline.classList.add('text-gray-500');
 			likeCountSpan.classList.remove('text-brand-red');
 			likeCountSpan.classList.add('text-gray-500');
+		}
+	}
+});
+
+// Comment dislike button click handler. Mutually exclusive with like:
+// disliking a comment the user had liked clears the like state (and vice
+// versa), matching the up/down pairing in the reference UI.
+document.addEventListener('click', async function(e) {
+	const dislikeBtn = e.target.closest('.dislike-btn-comment');
+	if (!dislikeBtn) return;
+
+	e.preventDefault();
+	e.stopPropagation();
+
+	const commentId = dislikeBtn.dataset.commentId;
+	const isDisliked = dislikeBtn.dataset.disliked === 'true';
+	const thumbOutline = dislikeBtn.querySelector('.thumb-down-outline');
+
+	const commentRow = dislikeBtn.closest('.comment-row');
+	const likeBtn = commentRow ? commentRow.querySelector('.like-btn-comment') : null;
+	const likeCountSpan = likeBtn ? likeBtn.querySelector('.like-count') : null;
+	const likeHeartOutline = likeBtn ? likeBtn.querySelector('.heart-outline') : null;
+
+	const originalDisliked = isDisliked;
+	const originalLikedState = likeBtn ? likeBtn.dataset.liked === 'true' : false;
+	const originalLikeCount = likeCountSpan ? parseInt(likeCountSpan.textContent) : null;
+
+	const newDisliked = !isDisliked;
+	dislikeBtn.dataset.disliked = newDisliked;
+
+	if (newDisliked) {
+		dislikeBtn.classList.add('is-disliking');
+		thumbOutline.classList.remove('text-gray-500');
+		thumbOutline.classList.add('text-gray-900');
+		setTimeout(() => dislikeBtn.classList.remove('is-disliking'), 400);
+
+		// Clear an existing like optimistically - the backend enforces the
+		// same exclusivity, this just keeps the two buttons in sync.
+		if (likeBtn && originalLikedState) {
+			likeBtn.dataset.liked = false;
+			likeHeartOutline.classList.remove('text-brand-red');
+			likeHeartOutline.classList.add('text-gray-500');
+			if (likeCountSpan) {
+				likeCountSpan.textContent = originalLikeCount - 1;
+				likeCountSpan.classList.remove('text-brand-red');
+				likeCountSpan.classList.add('text-gray-500');
+			}
+		}
+	} else {
+		dislikeBtn.classList.add('is-undisliking');
+		thumbOutline.classList.remove('text-gray-900');
+		thumbOutline.classList.add('text-gray-500');
+		setTimeout(() => dislikeBtn.classList.remove('is-undisliking'), 180);
+	}
+
+	try {
+		const response = await apiFetch(`/api/comments/${commentId}/dislike`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
+
+		if (!response.ok) {
+			throw new Error('Failed to dislike comment');
+		}
+
+		const data = await response.json();
+
+		// Reconcile with server response (server is the source of truth for
+		// exclusivity between like/dislike).
+		dislikeBtn.dataset.disliked = data.disliked;
+		if (likeBtn) {
+			likeBtn.dataset.liked = data.liked;
+			if (likeCountSpan) likeCountSpan.textContent = data.like_count;
+			if (data.liked) {
+				likeHeartOutline.classList.remove('text-gray-500');
+				likeHeartOutline.classList.add('text-brand-red');
+				if (likeCountSpan) {
+					likeCountSpan.classList.remove('text-gray-500');
+					likeCountSpan.classList.add('text-brand-red');
+				}
+			} else {
+				likeHeartOutline.classList.remove('text-brand-red');
+				likeHeartOutline.classList.add('text-gray-500');
+				if (likeCountSpan) {
+					likeCountSpan.classList.remove('text-brand-red');
+					likeCountSpan.classList.add('text-gray-500');
+				}
+			}
+		}
+
+	} catch (error) {
+		console.error('Error disliking comment:', error);
+
+		// Revert optimistic update
+		dislikeBtn.dataset.disliked = originalDisliked;
+		if (originalDisliked) {
+			thumbOutline.classList.remove('text-gray-500');
+			thumbOutline.classList.add('text-gray-900');
+		} else {
+			thumbOutline.classList.remove('text-gray-900');
+			thumbOutline.classList.add('text-gray-500');
+		}
+
+		if (likeBtn) {
+			likeBtn.dataset.liked = originalLikedState;
+			if (likeCountSpan) likeCountSpan.textContent = originalLikeCount;
+			if (originalLikedState) {
+				likeHeartOutline.classList.remove('text-gray-500');
+				likeHeartOutline.classList.add('text-brand-red');
+				if (likeCountSpan) {
+					likeCountSpan.classList.remove('text-gray-500');
+					likeCountSpan.classList.add('text-brand-red');
+				}
+			}
 		}
 	}
 });

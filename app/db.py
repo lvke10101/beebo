@@ -185,6 +185,25 @@ def init_db():
 
     conn.commit()
 
+    # Search history: per-user recent search terms (see app/routes/search.py).
+    # Deliberately just (user_id, query) rather than also caching result
+    # counts/type — history only ever needs to re-run the search, and
+    # caching stale counts would just be another thing to invalidate.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS search_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            query TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_search_history_user
+        ON search_history(user_id, created_at DESC)
+    ''')
+    conn.commit()
+
     # Library files table for document uploads
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS library_files (

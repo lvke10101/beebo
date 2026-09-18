@@ -112,7 +112,7 @@ async function switchAccount(userId) {
             renderProfileView();
         } else if (activeView === 'feed') {
             fetchAndRenderPosts();
-            updateGreeting();
+            updateFeedHeaderAvatar();
         }
     } catch (error) {
         console.error('Error switching accounts:', error);

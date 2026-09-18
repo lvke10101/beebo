@@ -13,6 +13,21 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
+// Truncate a post's raw (unescaped) text to `limit` characters for the
+// feed's "See more" preview, backing off to the nearest word boundary so
+// words aren't sliced mid-way. Falls back to a hard cut if the nearest
+// space is too far back (e.g. one long unbroken token) so the preview
+// doesn't shrink to almost nothing.
+function truncatePostContent(text, limit) {
+    if (text.length <= limit) return text;
+    let truncated = text.slice(0, limit);
+    const lastSpace = truncated.lastIndexOf(' ');
+    if (lastSpace > limit * 0.6) {
+        truncated = truncated.slice(0, lastSpace);
+    }
+    return truncated.trimEnd();
+}
+
 // Compute a human friendly "X ago" string from a SQLite timestamp
 // (format: "YYYY-MM-DD HH:MM:SS", assumed UTC since it's CURRENT_TIMESTAMP)
 function formatTimeAgo(createdAt) {
@@ -90,10 +105,10 @@ function buildPostImagesHtml(images) {
     const imgEls = images.map((url, i) => {
         const spanClass = (count === 3 && i === 0) ? 'row-span-2' : '';
         const heightClass = count === 1 ? 'max-h-[420px]' : 'h-full';
-        return `<img src="${escapeHtml(url)}" alt="Post attachment" loading="lazy" onerror="handlePostImageError(this)" class="w-full ${heightClass} object-cover ${spanClass}"/>`;
+        return `<img src="${escapeHtml(url)}" alt="Post attachment" loading="lazy" onerror="handlePostImageError(this)" data-image-index="${i}" class="w-full ${heightClass} object-cover ${spanClass}"/>`;
     }).join('');
 
-    return `<div class="grid ${gridClass} gap-0.5 rounded-2xl overflow-hidden mb-3 bg-gray-100">${imgEls}</div>`;
+    return `<div class="post-card-images grid ${gridClass} gap-0.5 rounded-2xl overflow-hidden mb-3 bg-gray-100 cursor-pointer">${imgEls}</div>`;
 }
 
 // Build the markup for a single post row in the flat, full-width timeline
@@ -101,6 +116,16 @@ function buildPostImagesHtml(images) {
 // card treatment) - shared by the main feed, own-profile Posts tab, and
 // another user's profile Posts tab (see postCardContainerIds in
 // comments.js). No badge/tag element for untagged posts.
+//
+// Layout: a fixed-width avatar rail on the left (.feed-card-avatar-rail)
+// with name/time/menu, body, images, and actions all in one right-hand
+// column - rather than avatar+name+time bunched into a header row above
+// full-width content. Same idea as the reference's card structure: the
+// avatar anchors to the first line, everything else reads as a single
+// aligned column beside it. All existing classes/data-attributes/onclick
+// handlers are preserved as-is (see openProfileFromPostCard,
+// closest('article[...]') lookups in comments.js/profile-user.js) -
+// only the arrangement changed.
 function buildPostCardHtml(post) {
     const avatarUrl = post.author_avatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(post.author_handle)}`;
     const authorName = escapeHtml(post.author_name);
@@ -109,48 +134,103 @@ function buildPostCardHtml(post) {
     const timeAgo = escapeHtml(formatPostTime(post.created_at));
     const likedTextColor = post.liked_by_user ? 'text-brand-red' : 'text-gray-500';
 
+    // Feed preview: long posts are truncated to plain text (rather than
+    // CSS line-clamped) so the "See more" button is always part of the
+    // rendered content instead of risking being clipped off along with
+    // the rest of the overflowing box. Full text lives in
+    // data-post-content on the <article> (see below); the truncated
+    // preview is stashed on the button itself (data-preview-text) so
+    // the toggle in comments.js can flip back and forth between the
+    // two without recomputing the truncation client-side.
     const isLong = post.content.length > 220;
-    const bodyClass = isLong ? 'post-content-clamped' : '';
+    const previewRaw = isLong ? truncatePostContent(post.content, 220) : post.content;
+    const previewText = isLong ? escapeHtml(previewRaw) : content;
+    // Collapsing back down is always possible for a truncated post, but
+    // the "See less" label only shows for posts over 100 words - shorter
+    // long posts still collapse on tap, just without the label.
+    const wordCount = isLong ? post.content.trim().split(/\s+/).filter(Boolean).length : 0;
+    const showSeeLess = wordCount > 100;
     const imagesHtml = buildPostImagesHtml(post.images);
 
     return `
-<article class="bg-white px-4 py-4 border-b border-gray-100 last:border-b-0" data-post-id="${post.id}" data-post-user-id="${escapeHtml(String(post.user_id))}" data-post-author-name="${authorName}" data-post-author-handle="${authorHandle}" data-post-author-avatar="${escapeHtml(post.author_avatar || '')}" data-post-content="${content}" data-post-created-at="${escapeHtml(post.created_at)}" data-post-like-count="${post.like_count}" data-post-comment-count="${post.comment_count}" data-post-liked="${post.liked_by_user}" data-post-images="${escapeHtml(JSON.stringify(post.images || []))}">
-<div class="flex justify-between items-start mb-3">
-<div class="flex items-center space-x-3 cursor-pointer" onclick="openProfileFromPostCard(this)">
+<article class="feed-card" data-post-id="${post.id}" data-post-user-id="${escapeHtml(String(post.user_id))}" data-post-author-name="${authorName}" data-post-author-handle="${authorHandle}" data-post-author-avatar="${escapeHtml(post.author_avatar || '')}" data-post-content="${content}" data-post-created-at="${escapeHtml(post.created_at)}" data-post-like-count="${post.like_count}" data-post-comment-count="${post.comment_count}" data-post-liked="${post.liked_by_user}" data-post-images="${escapeHtml(JSON.stringify(post.images || []))}">
+<div class="flex gap-3">
+<div class="feed-card-avatar-rail shrink-0 cursor-pointer" onclick="openProfileFromPostCard(this)">
 <img alt="${authorName}" class="w-11 h-11 rounded-full bg-gray-200 border border-gray-100 object-cover" src="${avatarUrl}"/>
-<div>
-<h2 class="font-bold text-gray-900 text-[15px] leading-tight">${authorName}</h2>
-<p class="text-gray-400 text-[13px] leading-tight">${timeAgo}</p>
 </div>
+<div class="flex-1 min-w-0">
+<div class="flex items-start justify-between gap-2 mb-0.5">
+<div class="flex items-baseline gap-1.5 min-w-0 cursor-pointer" onclick="openProfileFromPostCard(this)">
+<h2 class="font-bold text-gray-900 text-[15px] leading-tight truncate">${authorName}</h2>
+<span class="text-gray-400 text-[13px] leading-tight shrink-0">· ${timeAgo}</span>
 </div>
-<button class="post-menu-btn text-gray-400 hover:text-gray-600 p-1 -mr-1 -mt-1" aria-label="More options">
+<button class="post-menu-btn text-gray-400 hover:text-gray-600 p-1 -mr-1 shrink-0" aria-label="More options">
 <svg class="w-4 h-4" fill="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 <path d="M12 6a2 2 0 110-4 2 2 0 010 4zm0 8a2 2 0 110-4 2 2 0 010 4zm0 8a2 2 0 110-4 2 2 0 010 4z"></path>
 </svg>
 </button>
 </div>
+<p class="text-gray-800 text-[15px] mb-3 leading-relaxed post-content"><span class="post-content-text">${previewText}</span>${isLong ? ` <button class="read-more-btn text-gray-400 font-medium" data-preview-text="${escapeHtml(previewRaw)}" data-expanded="false" data-show-see-less="${showSeeLess}">See more&hellip;</button>` : ''}</p>
 ${imagesHtml}
-<p class="text-gray-800 text-[15px] mb-4 leading-relaxed post-content ${bodyClass}">${content}${isLong ? ' <button class="read-more-btn text-gray-400 font-medium">Read more</button>' : ''}</p>
-<div class="flex items-center text-gray-500">
-<button class="like-btn flex items-center space-x-2 hover:text-gray-700 transition-colors mr-6" data-post-id="${post.id}" data-liked="${post.liked_by_user}">
+<div class="flex items-center justify-between text-gray-500 post-actions-row px-5">
+<button class="share-btn flex items-center space-x-1.5 hover:text-gray-700 transition-colors">
+<svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.75" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke-linecap="round" stroke-linejoin="round"></path>
+<polyline points="15 3 21 3 21 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+<line x1="10" x2="21" y1="14" y2="3" stroke-linecap="round" stroke-linejoin="round"></line>
+</svg>
+</button>
+<button class="comment-btn flex items-center space-x-1.5 hover:text-gray-700 transition-colors">
+  <svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+   <path d="M20.5 4.75A2.75 2.75 0 0 0 17.75 2h-11.5A2.75 2.75 0 0 0 3.5 4.75v8.5A2.75 2.75 0 0 0 6.25 16h3.95l2.45 2.35a.5.5 0 0 0 .7 0L15.8 16h1.95a2.75 2.75 0 0 0 2.75-2.75v-8.5Z"/>
+   <circle cx="8" cy="9" r="1" fill="currentColor" stroke="none"/>
+   <circle cx="12" cy="9" r="1" fill="currentColor" stroke="none"/>
+   <circle cx="16" cy="9" r="1" fill="currentColor" stroke="none"/>
+  </svg>
+  <span class="text-sm comment-count">${post.comment_count}</span>
+</button>
+<button class="like-btn flex items-center space-x-1.5 hover:text-gray-700 transition-colors" data-post-id="${post.id}" data-liked="${post.liked_by_user}">
 <span class="like-icon-wrapper">
-	<svg class="w-5 h-5 ${likedTextColor} heart-outline" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-	<path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" stroke-linecap="round" stroke-linejoin="round"></path>
+	<svg class="w-[19px] h-[19px] ${likedTextColor} heart-outline" fill="none" stroke="currentColor" stroke-width="1.75" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+	<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" stroke-linecap="round" stroke-linejoin="round"></path>
 	</svg>
-	<svg class="w-5 h-5 text-brand-red heart-filled absolute inset-0" fill="currentColor" stroke="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-	<path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"></path>
+	<svg class="w-[19px] h-[19px] text-brand-red heart-filled absolute inset-0" fill="currentColor" stroke="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+	<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
 	</svg>
 </span>
 <span class="text-sm like-count ${likedTextColor}">${post.like_count}</span>
 </button>
-<button class="comment-btn flex items-center space-x-2 hover:text-gray-700">
-<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-<path d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 01-.923 1.785A5.969 5.969 0 006 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337z" stroke-linecap="round" stroke-linejoin="round"></path>
-</svg>
-<span class="text-sm comment-count">${post.comment_count}</span>
-</button>
+</div>
+</div>
 </div>
 </article>`;
+}
+
+// Lightweight shimmer placeholder rows shown only while the very first
+// page of the feed is loading (renderFeedPosts already handles the
+// "no posts" empty state and loadMoreFeedPosts has its own text-only
+// "Loading more..." row for pagination - this is just for the initial
+// blank-screen moment, so the feed's shape is visible immediately
+// instead of a flash of empty white).
+function buildFeedSkeletonHtml(count) {
+    const row = `
+<div class="feed-card">
+<div class="flex gap-3">
+<div class="feed-card-avatar-rail shrink-0">
+<div class="w-11 h-11 rounded-full skeleton-shimmer"></div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="h-3.5 w-32 rounded skeleton-shimmer mb-2"></div>
+<div class="h-3.5 w-full rounded skeleton-shimmer mb-1.5"></div>
+<div class="h-3.5 w-4/5 rounded skeleton-shimmer mb-3"></div>
+<div class="flex items-center gap-6">
+<div class="h-4 w-10 rounded skeleton-shimmer"></div>
+<div class="h-4 w-10 rounded skeleton-shimmer"></div>
+</div>
+</div>
+</div>
+</div>`;
+    return row.repeat(count);
 }
 
 // Render an array of posts into the feed container, or an empty state
@@ -179,6 +259,13 @@ let feedExhausted = false;
 const FEED_PAGE_SIZE = 20;
 const FEED_SCROLL_THRESHOLD_PX = 300;
 
+// Which feed tab is active: 'for-you' (default, unfiltered) or 'following'
+// (server-side filtered to posts from users the session follows - see the
+// feed=following param on GET /api/posts). Set by switchFeedTab(), read by
+// both fetchAndRenderPosts() and loadMoreFeedPosts() so pagination stays on
+// whichever tab is currently open instead of drifting back to "For You".
+let activeFeedTab = 'for-you';
+
 // Fetch the first page of posts from the backend and render them into the
 // feed, resetting pagination state. Call this whenever the feed is
 // (re)opened, not when appending more posts (see loadMoreFeedPosts).
@@ -186,9 +273,16 @@ async function fetchAndRenderPosts() {
     feedNextCursor = null;
     feedIsLoadingMore = false;
     feedExhausted = false;
+    resetFeedHeaderBar();
+
+    const container = document.getElementById('feed-posts-container');
+    if (container) {
+        container.innerHTML = buildFeedSkeletonHtml(4);
+    }
 
     try {
-        const response = await fetch(`/api/posts?limit=${FEED_PAGE_SIZE}`);
+        const feedParam = activeFeedTab === 'following' ? '&feed=following' : '';
+        const response = await fetch(`/api/posts?limit=${FEED_PAGE_SIZE}${feedParam}`);
         if (!response.ok) {
             throw new Error('Failed to load posts');
         }
@@ -196,8 +290,14 @@ async function fetchAndRenderPosts() {
         renderFeedPosts(data.posts);
         feedNextCursor = data.next_cursor;
         feedExhausted = data.next_cursor === null;
+
+        if (data.posts.length === 0 && activeFeedTab === 'following' && container) {
+            container.innerHTML = `
+<div class="flex items-center justify-center h-full min-h-[50vh] text-gray-400 text-sm text-center px-8">
+Posts from people you follow will show up here.
+</div>`;
+        }
     } catch (error) {
-        const container = document.getElementById('feed-posts-container');
         if (container) {
             container.innerHTML = `
 <div class="flex items-center justify-center h-full min-h-[50vh] text-gray-400 text-sm">
@@ -206,6 +306,45 @@ No posts yet
         }
         console.error('Error loading posts:', error);
     }
+}
+
+// Switches the active feed tab (see the #feed-tab-for-you/#feed-tab-following
+// buttons in feed.html): swaps the active/inactive Tailwind classes between
+// the two tabs' inner <span> labels - rather than toggling a shared CSS
+// class - because "active" here isn't just one style, it's a whole cluster
+// (color, weight, underline) that has to move from one tab to the other
+// together, and the two tabs need opposite states in the same click.
+// Classes live on the inner span rather than the outer <a> (flex-1,
+// centers the label in its half of the nav) because the border-bottom used
+// as the underline needs to size to the text, not stretch across that
+// whole half-width flex item. border-b-2 and pb-2.5 themselves are never
+// toggled - both tabs keep them permanently and only the border's color
+// swaps between transparent and gray-900 - so an inactive tab reserves the
+// same space its underline will occupy once active instead of the layout
+// shifting by 2px when it does.
+function switchFeedTab(tab) {
+    if (tab === activeFeedTab) return;
+    activeFeedTab = tab;
+
+    const forYouTab = document.getElementById('feed-tab-for-you');
+    const followingTab = document.getElementById('feed-tab-following');
+    if (!forYouTab || !followingTab) return;
+    const forYouLabel = forYouTab.querySelector('span');
+    const followingLabel = followingTab.querySelector('span');
+    if (!forYouLabel || !followingLabel) return;
+
+    const activeClasses = ['text-gray-900', 'font-bold', 'border-gray-900'];
+    const inactiveClasses = ['text-gray-500', 'font-medium', 'border-transparent', 'hover:text-gray-700'];
+
+    const activeLabel = tab === 'following' ? followingLabel : forYouLabel;
+    const inactiveLabel = tab === 'following' ? forYouLabel : followingLabel;
+
+    inactiveLabel.classList.remove(...activeClasses);
+    inactiveLabel.classList.add(...inactiveClasses);
+    activeLabel.classList.remove(...inactiveClasses);
+    activeLabel.classList.add(...activeClasses);
+
+    fetchAndRenderPosts();
 }
 
 // Append the next page of posts to the bottom of the feed. Guarded against
@@ -229,7 +368,8 @@ async function loadMoreFeedPosts() {
     if (container) container.appendChild(loadingRow);
 
     try {
-        const response = await fetch(`/api/posts?limit=${FEED_PAGE_SIZE}&cursor=${feedNextCursor}`);
+        const feedParam = activeFeedTab === 'following' ? '&feed=following' : '';
+        const response = await fetch(`/api/posts?limit=${FEED_PAGE_SIZE}&cursor=${feedNextCursor}${feedParam}`);
         if (!response.ok) {
             throw new Error('Failed to load more posts');
         }
@@ -261,5 +401,274 @@ async function loadMoreFeedPosts() {
             loadMoreFeedPosts();
         }
     });
+})();
+
+// ---- Image Viewer (full-screen, image-only) ----
+//
+// Opened by tapping a post's image (see the .post-card-images delegate in
+// comments.js). Deliberately separate from the comment/Post-detail overlay
+// in comment_overlay.html/comments.js - the Comment button is the only
+// entry point into that screen; this just shows the tapped image, swipeable
+// to the post's other images if it has more, with no comments/reply/
+// follow/action-row chrome.
+
+// Keeps the counter (e.g. "2 / 4") in sync while swiping - stored so it can
+// be detached in closeImageViewer() instead of accumulating a new scroll
+// listener (and firing on a stale track) every time the viewer reopens.
+let imageViewerScrollHandler = null;
+
+function openImageViewer(images, startIndex) {
+    const overlay = document.getElementById('image-viewer-overlay');
+    const track = document.getElementById('image-viewer-track');
+    const counter = document.getElementById('image-viewer-counter');
+    if (!overlay || !track || !counter || !Array.isArray(images) || images.length === 0) return;
+
+    track.innerHTML = images.map(url => `
+<div class="w-full h-full shrink-0 snap-center flex items-center justify-center">
+<img src="${escapeHtml(url)}" alt="Post attachment" class="max-w-full max-h-full object-contain"/>
+</div>`).join('');
+
+    if (images.length > 1) {
+        counter.textContent = `${startIndex + 1} / ${images.length}`;
+        counter.classList.remove('hidden');
+        imageViewerScrollHandler = function() {
+            const idx = Math.round(track.scrollLeft / track.clientWidth);
+            counter.textContent = `${Math.min(idx, images.length - 1) + 1} / ${images.length}`;
+        };
+        track.addEventListener('scroll', imageViewerScrollHandler, { passive: true });
+    } else {
+        counter.classList.add('hidden');
+    }
+
+    overlay.classList.remove('hidden');
+    document.body.classList.add('overlay-open');
+
+    // Jump straight to the tapped image - no animated scroll fighting the
+    // overlay's own appearance.
+    track.scrollLeft = startIndex * track.clientWidth;
+}
+
+function closeImageViewer() {
+    const overlay = document.getElementById('image-viewer-overlay');
+    const track = document.getElementById('image-viewer-track');
+    if (!overlay || !track) return;
+
+    overlay.classList.add('hidden');
+    closeImageViewerMenu();
+
+    // The viewer can be opened from on top of the already-open comment
+    // overlay (see the #overlay-post-images listener in comments.js), which
+    // holds this same lock itself - only release it here if that overlay
+    // isn't also still open, or closing the viewer would unlock background
+    // scroll while the comment overlay is still visible underneath it.
+    const commentOverlay = document.getElementById('comment-overlay');
+    const commentOverlayOpen = commentOverlay && !commentOverlay.classList.contains('hidden');
+    if (!commentOverlayOpen) {
+        document.body.classList.remove('overlay-open');
+    }
+
+    if (imageViewerScrollHandler) {
+        track.removeEventListener('scroll', imageViewerScrollHandler);
+        imageViewerScrollHandler = null;
+    }
+    track.innerHTML = '';
+}
+
+// "..." menu on the image viewer (Save). A separate small dropdown rather
+// than reusing post-menu-sheet - that one is a full-width bottom sheet for
+// post-level actions (Share/Hide/Report/etc), this is just the single
+// image-level Save action anchored under the button that opened it.
+function openImageViewerMenu() {
+    const popover = document.getElementById('image-viewer-menu-popover');
+    if (popover) popover.classList.remove('hidden');
+}
+
+function closeImageViewerMenu() {
+    const popover = document.getElementById('image-viewer-menu-popover');
+    if (popover) popover.classList.add('hidden');
+}
+
+document.getElementById('image-viewer-menu-btn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    const popover = document.getElementById('image-viewer-menu-popover');
+    if (!popover) return;
+    popover.classList.contains('hidden') ? openImageViewerMenu() : closeImageViewerMenu();
+});
+
+// Tap anywhere else in the viewer closes the popover without closing the
+// whole viewer (that's handled separately by the overlay's own
+// click-on-backdrop listener below).
+document.getElementById('image-viewer-overlay').addEventListener('click', function(e) {
+    if (!e.target.closest('#image-viewer-menu-popover') && !e.target.closest('#image-viewer-menu-btn')) {
+        closeImageViewerMenu();
+    }
+});
+
+// Downloads whichever image is currently in view (tracked the same way the
+// swipe counter is - by scroll position - rather than always the first
+// image in a multi-image post).
+function handleImageViewerSave() {
+    const track = document.getElementById('image-viewer-track');
+    if (!track) return;
+
+    const slides = track.querySelectorAll('img');
+    if (slides.length === 0) return;
+    const activeIndex = Math.min(
+        Math.round(track.scrollLeft / track.clientWidth),
+        slides.length - 1
+    );
+    const activeImg = slides[activeIndex];
+
+    const link = document.createElement('a');
+    link.href = activeImg.src;
+    link.download = 'beebo-image.jpg';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    closeImageViewerMenu();
+    showToast('Image saved');
+}
+
+document.getElementById('image-viewer-save-btn').addEventListener('click', handleImageViewerSave);
+
+document.getElementById('close-image-viewer-btn').addEventListener('click', closeImageViewer);
+document.getElementById('image-viewer-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeImageViewer();
+});
+
+// X/Twitter-style auto-hide for the whole feed header (#feed-header: the
+// avatar/logo/notifications bar plus the category tabs): retracts as one
+// unit on scroll-down to give posts more of the screen, reappears as one
+// unit on scroll-up. A separate listener from initFeedInfiniteScroll above
+// (both just read scrollTop, neither calls preventDefault) rather than
+// folding into it, so this stays independent of pagination and doesn't get
+// lost if that logic changes.
+//
+// Direction is tracked via accumulated distance rather than raw per-event
+// delta, so a single jittery scroll event (trackpad/momentum scroll fires
+// many small events, not always monotonic) can't flip the header back and
+// forth - it only toggles once real, sustained movement in a direction
+// passes a small threshold, and any movement the other way resets that
+// accumulator instead of fighting it frame by frame.
+const FEED_HEADER_HIDE_THRESHOLD_PX = 10;
+const FEED_HEADER_SHOW_THRESHOLD_PX = 10;
+const FEED_HEADER_TOP_REVEAL_PX = 4;
+
+let feedHeaderScrollTop = 0;
+let feedHeaderAccumDown = 0;
+let feedHeaderAccumUp = 0;
+let feedHeaderHidden = false;
+
+// The header's natural height depends on the avatar/logo/notification icon
+// sizing (all tweakable independently above) rather than being a fixed
+// constant, so it's measured off the real element instead of hardcoded.
+// Skipped while the header is mid-hide so it can't read the collapsing
+// max-height back as the "full" height, and skipped when scrollHeight is 0
+// (element exists but its view isn't the active one yet - display:none
+// ancestors report 0 - see .view-section in style.css) so an out-of-view
+// measurement can't pin --feed-header-full-height to 0px. That property is
+// set inline once written, so a stale 0 would permanently beat the CSS
+// fallback (max-height: var(--feed-header-full-height, 220px)) even after
+// the view becomes visible - this is what caused the header to render
+// collapsed right after login (script parses/runs while #login-view, not
+// #feed-view, is active).
+function measureFeedHeaderHeight() {
+    if (feedHeaderHidden) return;
+    const header = document.getElementById('feed-header');
+    if (!header || header.scrollHeight === 0) return;
+    header.style.setProperty('--feed-header-full-height', `${header.scrollHeight}px`);
+}
+
+// Called on every fresh feed load (see fetchAndRenderPosts) so a re-open
+// or pull-to-refresh always starts with the header visible and the
+// tracked scroll position doesn't carry over stale from the previous load.
+// Also re-measures the header height here (not just at script-load time,
+// which can happen before #feed-view is ever visible) - showView('feed')
+// has already added the 'active' class by the time fetchAndRenderPosts()
+// (and thus this) runs, so the header is guaranteed laid out and
+// measurable at this point.
+function resetFeedHeaderBar() {
+    feedHeaderScrollTop = 0;
+    feedHeaderAccumDown = 0;
+    feedHeaderAccumUp = 0;
+    feedHeaderHidden = false;
+    const header = document.getElementById('feed-header');
+    if (header) header.classList.remove('header-hidden');
+    const fab = document.getElementById('compose-fab');
+    if (fab) fab.classList.remove('fab-hidden');
+    measureFeedHeaderHeight();
+}
+
+(function initFeedHeaderAutoHide() {
+    const container = document.getElementById('feed-posts-container');
+    const header = document.getElementById('feed-header');
+    if (!container || !header) return;
+
+    // The compose FAB is toggled in lockstep with the header right here,
+    // at the same three transition points below, instead of via its own
+    // separate scroll listener - that's what keeps it perfectly synced
+    // rather than drifting against the header's own thresholds.
+    const fab = document.getElementById('compose-fab');
+
+    let ticking = false;
+
+    measureFeedHeaderHeight();
+    window.addEventListener('resize', measureFeedHeaderHeight);
+
+    function applyScroll() {
+        const scrollTop = container.scrollTop;
+        const delta = scrollTop - feedHeaderScrollTop;
+        feedHeaderScrollTop = scrollTop;
+
+        // Near the very top, always show - an overscroll bounce here reads
+        // as a big downward delta otherwise and would hide the header right
+        // as the person lands back at the top of their feed.
+        if (scrollTop <= FEED_HEADER_TOP_REVEAL_PX) {
+            feedHeaderAccumDown = 0;
+            feedHeaderAccumUp = 0;
+            if (feedHeaderHidden) {
+                feedHeaderHidden = false;
+                header.classList.remove('header-hidden');
+                if (fab) fab.classList.remove('fab-hidden');
+                measureFeedHeaderHeight();
+            }
+            return;
+        }
+
+        if (delta > 0) {
+            feedHeaderAccumDown += delta;
+            feedHeaderAccumUp = 0;
+            if (!feedHeaderHidden && feedHeaderAccumDown > FEED_HEADER_HIDE_THRESHOLD_PX) {
+                feedHeaderHidden = true;
+                header.classList.add('header-hidden');
+                if (fab) fab.classList.add('fab-hidden');
+            }
+        } else if (delta < 0) {
+            feedHeaderAccumUp += -delta;
+            feedHeaderAccumDown = 0;
+            if (feedHeaderHidden && feedHeaderAccumUp > FEED_HEADER_SHOW_THRESHOLD_PX) {
+                feedHeaderHidden = false;
+                header.classList.remove('header-hidden');
+                if (fab) fab.classList.remove('fab-hidden');
+                measureFeedHeaderHeight();
+            }
+        }
+    }
+
+    // rAF-batched: caps this to once per animation frame no matter how many
+    // scroll events fire, so it can't compete with the browser's own
+    // scroll/momentum handling. Passive, and never calls preventDefault,
+    // so normal feed scrolling and every other in-feed interaction (likes,
+    // opening the comment overlay, pull-to-refresh, infinite scroll above)
+    // is untouched.
+    container.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+            applyScroll();
+            ticking = false;
+        });
+    }, { passive: true });
 })();
 

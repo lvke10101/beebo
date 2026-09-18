@@ -39,7 +39,7 @@ function apiFetch(url, options = {}) {
 // responding to a browser Back/Forward navigation doesn't push a second,
 // redundant history entry on top of the one the browser just navigated to.
 function showView(viewName, { skipUrlSync = false } = {}) {
-    const views = ['login', 'signup', 'feed', 'profile', 'edit-profile', 'user-profile', 'create-post', 'businesses', 'courses', 'gpa-calculator', 'chat', 'library', 'library-contribute'];
+    const views = ['login', 'signup', 'feed', 'profile', 'edit-profile', 'user-profile', 'create-post', 'businesses', 'courses', 'gpa-calculator', 'chat', 'library', 'library-contribute', 'search'];
     views.forEach(v => {
         const view = document.getElementById(v + '-view');
         if (view) {
@@ -90,7 +90,7 @@ function showView(viewName, { skipUrlSync = false } = {}) {
     // Load fresh posts whenever the feed is shown
     if (viewName === 'feed') {
         fetchAndRenderPosts();
-        updateGreeting();
+        updateFeedHeaderAvatar();
     }
 
     // Refresh the profile header and the user's own posts each time it's shown
@@ -126,6 +126,12 @@ function showView(viewName, { skipUrlSync = false } = {}) {
     // Reset the upload wizard to step 1 each time Contribute is opened
     if (viewName === 'library-contribute') {
         resetLibraryContributeWizard();
+    }
+
+    // Reset the search field/state and reload history+trending each time
+    // Search opens, and remember which screen to return to on Back.
+    if (viewName === 'search') {
+        initSearchView();
     }
 }
 

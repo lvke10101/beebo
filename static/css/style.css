@@ -27,6 +27,236 @@
             -webkit-line-clamp: unset;
             overflow: visible;
         }
+
+        /* ---- Threads-inspired feed/thread visual system ----
+           Adapted from adrianhajdin/threads' component-layer pattern
+           (semantic classes for card layout + a dedicated avatar-rail
+           "connector bar" for reply threads) to Beebo's existing
+           light/red palette - not a dark-mode reskin, just the same
+           structural discipline: a left avatar rail, a growing
+           connector line, and a named, reusable spacing/type scale
+           instead of ad hoc utility soup repeated in every template. */
+
+        /* Feed row: same visual result as before (flat, bordered,
+           no per-card shadow) but named so spacing changes happen in
+           one place instead of a JS template literal. */
+        .feed-card {
+            background-color: #fff;
+            padding: 14px 16px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .feed-card:last-child {
+            border-bottom: none;
+        }
+        /* Subtle press feedback on tap, same idea as Threads' card
+           hover/active state, toned down for a touch interface where
+           hover doesn't apply. */
+        .feed-card:active {
+            background-color: #fafafa;
+        }
+
+        /* Avatar rail: fixed-width left column so name/content/actions
+           align in a single right-hand column regardless of how many
+           lines the author name wraps to - this is the main structural
+           difference from the previous "avatar + stacked name/time"
+           header row. */
+        .feed-card-avatar-rail {
+            width: 44px;
+        }
+
+        /* ---- Nested comment tree: straight spine connectors ----
+           True depth-based nesting (each reply-to-a-reply indents further
+           right under its actual parent) instead of a flattened single
+           indent level. One straight vertical line per nesting level, no
+           curve/elbow - same model as the nested-comments-yt reference
+           (a border-left running the full height of each level's box). */
+
+        /* One top-level comment (with its full nested reply chain). Only
+           root threads (direct children of #overlay-comments-container)
+           get the divider below - nested replies are separated by
+           indentation/connector instead, not a divider line. */
+        .comment-thread {
+            position: relative;
+        }
+        #overlay-comments-container > .comment-thread {
+            padding-bottom: 18px;
+            margin-bottom: 18px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        #overlay-comments-container > .comment-thread:last-child {
+            padding-bottom: 0;
+            margin-bottom: 0;
+            border-bottom: none;
+        }
+        /* Spacing between sibling replies nested under the same parent. */
+        .comment-children > .comment-thread + .comment-thread {
+            margin-top: 16px;
+        }
+
+        .comment-row {
+            display: flex;
+            gap: 12px;
+        }
+        .thread-avatar-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 34px;
+            flex-shrink: 0;
+        }
+        .comment-avatar {
+            width: 34px;
+            height: 34px;
+        }
+        /* The spine: fills the rest of the avatar column's height (the
+           column is stretched to match the row's full height via flex
+           default align-items:stretch), so it always reaches exactly to
+           this row's bottom regardless of how tall the comment text runs -
+           picked up again by .comment-children's own border-left below. */
+        .thread-connector {
+            width: 2px;
+            border-radius: 9999px;
+            background-color: #e5e7eb;
+            flex: 1 1 auto;
+            min-height: 8px;
+            margin-top: 6px;
+        }
+
+        /* Nested replies, indented one level right of the parent avatar's
+           center. Straight border-left only - no elbow, no curve. Matches
+           the reference repo's model: one continuous vertical rule per
+           nesting level, running the full height of that level's box.
+           margin-left is set to 16px (not 20px) so the border lands at
+           x:16-18, the same band .thread-connector already occupies above
+           it (avatar column is 34px wide, so its centered 2px connector
+           sits at (34-2)/2 = 16-18) - the two pieces line up into one
+           unbroken straight line instead of two parallel rules a few
+           pixels apart. */
+        .comment-children {
+            position: relative;
+            margin-left: 16px;
+            padding-left: 24px;
+            /* padding-top, not margin-top: the border-left spine below
+               needs to run through this gap too, or the line would break
+               between the parent's .thread-connector (which only spans
+               the parent's own comment-row) and where this box's border
+               starts. Padding keeps the border continuous while still
+               pushing the first reply's content down for clearer
+               separation from its parent. */
+            padding-top: 14px;
+            border-left: 2px solid #e5e7eb;
+        }
+
+        /* Action row (like/reply) beneath a comment's text. Uses the same
+           justify-between distribution and icon/label gap (6px, matching
+           space-x-1.5) as the feed's post-actions-row so per-comment
+           actions read consistently with the post-level action bar. */
+        .comment-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 20px;
+            width: 100%;
+            color: #6b7280;
+        }
+        .comment-action-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Reply-thread collapse/expand toggle. Only rendered on a comment
+           that has children (see buildRepliesToggleHtml in comments.js).
+           Collapsing hides that comment's entire .comment-children
+           subtree in one step, since nested replies live as real DOM
+           descendants of it - no need to separately toggle grandchildren. */
+        .comment-children.collapsed {
+            display: none;
+        }
+        .replies-toggle-chevron {
+            transition: transform 150ms ease;
+        }
+        .comment-replies-toggle.is-collapsed .replies-toggle-chevron {
+            transform: rotate(-90deg);
+        }
+
+        /* Comments section header: a plain sub-header row (count + sort
+           chevron) rather than a heavy filled pill, so it reads as a
+           section divider between the original post and the reply list -
+           closer to the reference's minimal "Comments ⌄" row. */
+        .comments-header-trigger {
+            background-color: transparent;
+            border-bottom: 1px solid #f3f4f6;
+            border-radius: 0;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        .comments-header-trigger:active {
+            background-color: #fafafa;
+        }
+
+        /* Feed header (avatar/logo/notifications bar + category tabs):
+           retracts as a single unit on scroll-down, reappears on scroll-up
+           (see initFeedHeaderAutoHide in feed.js) - X/Twitter-style. Avatar,
+           logo, notifications icon and the tabs are all just child content
+           of this one element, so animating .feed-header-bar as a unit is
+           what keeps them moving together - no per-child transitions needed.
+           #feed-view is a flex column with #feed-posts-container as its
+           flex-1 scrolling child (see #feed-view.active above), so a
+           transform on the header would just move its pixels without
+           freeing the space - max-height is what actually reflows the
+           column and lets the posts container grow to fill the gap.
+           --feed-header-full-height is set from feed.js (measured off the
+           real header, since its height depends on the avatar/logo/icon
+           sizing above and isn't a fixed constant) so the transition maps
+           to visible movement instead of most of it being wasted while
+           max-height sits above the content's real height.
+
+           max-height and opacity are kept on the SAME duration/curve here
+           (both were previously mismatched at 240ms/180ms) - opacity
+           finishing before max-height made the header visibly "pop" out
+           of existence mid-collapse instead of settling smoothly. The
+           easing is a gentle ease-out (quick start, long soft tail)
+           rather than the old standard Material curve, which reads as
+           slightly snappier/more mechanical at this duration.
+
+           Hide and reveal are intentionally asymmetric: hiding is a touch
+           longer (280ms) so it reads as a deliberate, settled retraction
+           rather than a flick; revealing is a touch shorter (220ms) so
+           the header feels immediately responsive when the person scrolls
+           back up wanting it. Neither is slow enough to feel sluggish. */
+        .feed-header-bar {
+            max-height: var(--feed-header-full-height, 220px);
+            overflow: hidden;
+            opacity: 1;
+            transition: max-height 600ms cubic-bezier(0.16, 1, 0.3, 1),
+                        opacity 600ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .feed-header-bar.header-hidden {
+            max-height: 0;
+            opacity: 0;
+            pointer-events: none;
+            transition: max-height 600ms cubic-bezier(0.16, 1, 0.3, 1),
+                        opacity 600ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .feed-header-bar {
+                transition: none !important;
+            }
+        }
+
+        /* Feed skeleton loader (initial load only - pagination's
+           "Loading more..." row is unchanged). Shimmer instead of a
+           bare spinner so the feed's shape is visible immediately. */
+        .skeleton-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #f7f7f7 37%, #f0f0f0 63%);
+            background-size: 400% 100%;
+            animation: skeletonShimmer 1.4s ease infinite;
+        }
+        @keyframes skeletonShimmer {
+            0% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
         .card-shadow {
             box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.024);
         }
@@ -39,6 +269,32 @@
         }
         .view-section.active {
             display: block !important;
+        }
+        /* feed-view is the one view whose <main> (#feed-posts-container) is
+           meant to be its own internal scroll container (flex-1
+           overflow-y-auto), with the header/tabs bar staying fixed above
+           it - unlike every other view here, which is min-h-screen and
+           relies on the document itself scrolling. That only works if
+           feed-view is an actual bounded-height flex column; as plain
+           `display:block` (from .view-section.active above) it has no
+           height constraint, so #feed-posts-container never overflows,
+           the document scrolls instead, and #feed-posts-container's
+           scroll listener (tab auto-hide, infinite scroll) never fires.
+           ID selector here outranks the class-only rule above so this
+           wins while active. */
+        #feed-view.active {
+            display: flex !important;
+            flex-direction: column;
+            height: 100%;
+        }
+        /* Flex items default to min-height:auto, which keeps them from
+           shrinking below their content's natural height - #feed-posts-
+           container would then just grow to fit every post instead of
+           respecting flex-1 and scrolling internally. min-height:0
+           overrides that so it actually clips to the space #feed-view
+           gives it above and overflow-y-auto takes over. */
+        #feed-posts-container {
+            min-height: 0;
         }
         .input-icon-container {
             position: absolute;
@@ -56,17 +312,28 @@
             opacity: 0;
             transform: scale(0.9);
         }
-        /* Compose FAB styles */
+        /* Compose FAB styles.
+           Visibility is now driven directly by feed.js's header-hidden
+           logic (see initFeedHeaderAutoHide) rather than an independent
+           scroll listener, so it can never drift out of sync with the
+           header. The timing/curve below is intentionally identical to
+           .feed-header-bar's (220ms reveal / 280ms hide, same ease-out),
+           so the two read as one synchronized motion instead of two
+           separately-animated elements that happen to move at similar
+           times. */
         .z-9 {
             z-index: 9;
         }
         #compose-fab {
-            transition: transform 200ms ease-in-out, opacity 200ms ease-in-out;
+            transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+                        opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
         }
         #compose-fab.fab-hidden {
             transform: translateY(100px);
             opacity: 0;
             pointer-events: none;
+            transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
+                        opacity 280ms cubic-bezier(0.16, 1, 0.3, 1);
         }
         /* Comment overlay styles */
         #comment-overlay {
@@ -97,6 +364,10 @@
         body.overlay-open {
             overflow: hidden;
         }
+        /* Single scroll region for the comment overlay: post + comments
+           header + reply list all live inside this one element now, so the
+           whole view scrolls together (post included) instead of the post
+           being pinned outside a separately-scrolling replies box. */
         .overlay-replies-section {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
@@ -164,6 +435,41 @@
 
         /* Unliking animation (simple fade/scale down) */
         .is-unliking .like-icon-wrapper {
+            animation: heartShrink 180ms cubic-bezier(.4,0,.2,1) forwards;
+        }
+
+        /* Dislike (thumb-down) icon wrapper - mirrors .like-icon-wrapper */
+        .dislike-icon-wrapper {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        .thumb-down-outline {
+            display: block;
+        }
+
+        .thumb-down-filled {
+            display: none;
+        }
+
+        .dislike-btn-comment[data-disliked="true"] .thumb-down-outline {
+            display: none;
+        }
+
+        .dislike-btn-comment[data-disliked="true"] .thumb-down-filled {
+            display: block;
+        }
+
+        .is-disliking .dislike-icon-wrapper {
+            animation: heartPop 400ms cubic-bezier(.17,.89,.32,1.49) forwards;
+        }
+
+        .is-undisliking .dislike-icon-wrapper {
             animation: heartShrink 180ms cubic-bezier(.4,0,.2,1) forwards;
         }
 
@@ -344,25 +650,40 @@
     --bb-cover-gradient-via: #e0f2fe;  /* sky-100 */
 }
 
+/* Logo theme swap: pair a .logo-light/.logo-dark <img> in markup;
+   CSS picks the right one off the same html.dark class the rest of the
+   theme system uses, no JS involved. */
+.logo-dark { display: none; }
+html.dark .logo-light { display: none; }
+html.dark .logo-dark { display: inline-block; }
+
 html.dark {
-    --bb-bg-app: #000000;
-    --bb-bg-surface: #0d0d0d;
-    --bb-bg-subtle: #111111;
-    --bb-bg-muted: #1a1a1a;
-    --bb-bg-muted-2: #262626;
+    /* Primary dark-mode background, as specified. Every other dark
+       surface/border token below is a lighter step derived from this same
+       hue (a dark, slightly-blue slate rather than neutral gray) so cards,
+       hover states, and dividers all read as one consistent palette instead
+       of a navy page behind neutral-gray surfaces. Text tokens are
+       untouched: #0C1116's luminance is close enough to the pure black it
+       replaces that the existing light text colors keep effectively the
+       same contrast ratios against it. */
+    --bb-bg-app: #0C1116;
+    --bb-bg-surface: #131A21;
+    --bb-bg-subtle: #171E26;
+    --bb-bg-muted: #1E2731;
+    --bb-bg-muted-2: #2A3441;
     --bb-text-primary: #f9fafb;
     --bb-text-secondary: #e5e7eb;
     --bb-text-tertiary: #d1d5db;
     --bb-text-quaternary: #9ca3af;
     --bb-text-muted: #71717a;
     --bb-text-faint: #52525b;
-    --bb-border-subtle: #1f1f1f;
-    --bb-border-default: #2a2a2a;
-    --bb-border-strong: #3a3a3a;
+    --bb-border-subtle: #202932;
+    --bb-border-default: #333f4c;
+    --bb-border-strong: #48576a;
     --bb-red-tint: rgba(218, 41, 46, 0.16);
     --bb-red-tint-2: rgba(218, 41, 46, 0.24);
     --bb-cover-gradient-from: #123049;
-    --bb-cover-gradient-via: #0d0d0d;
+    --bb-cover-gradient-via: #131A21;
 }
 
 html.dark body {
@@ -436,4 +757,45 @@ html.theme-transitioning * {
     html.theme-transitioning * {
         transition: none !important;
     }
+}
+
+/* Custom classes below set their own literal hex colors instead of a
+   Tailwind utility, so none of the `html.dark .bg-*` / `.text-*` overrides
+   above ever reach them - each needs its own override here, mapped to the
+   same --bb- tokens everything else already uses, or it stays stuck in its
+   light-mode color while its surrounding text/borders flip around it. */
+html.dark .feed-card {
+    background-color: var(--bb-bg-surface);
+    border-bottom-color: var(--bb-border-subtle);
+}
+html.dark .feed-card:active {
+    background-color: var(--bb-bg-subtle);
+}
+html.dark .thread-connector {
+    background-color: var(--bb-border-default);
+}
+html.dark .comment-children {
+    border-left-color: var(--bb-border-default);
+}
+html.dark .comment-actions {
+    color: var(--bb-text-quaternary);
+}
+html.dark .comment-replies-toggle:hover {
+    color: var(--bb-text-secondary);
+}
+html.dark .comments-header-trigger {
+    border-bottom-color: var(--bb-border-subtle);
+}
+html.dark .comments-header-trigger:active {
+    background-color: var(--bb-bg-subtle);
+}
+html.dark .skeleton-shimmer {
+    background: linear-gradient(90deg, var(--bb-bg-muted) 25%, var(--bb-bg-muted-2) 37%, var(--bb-bg-muted) 63%);
+    background-size: 400% 100%;
+}
+html.dark .star-empty {
+    color: var(--bb-border-strong);
+}
+html.dark .auth-bg {
+    background: linear-gradient(180deg, var(--bb-bg-app) 0%, var(--bb-bg-surface) 100%);
 }

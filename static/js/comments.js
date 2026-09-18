@@ -20,23 +20,44 @@ function isCurrentUserPostOwner(authorId) {
 // Post card interactions (read more, three-dot menu, comment, like) are
 // delegated per-container rather than globally, so any view that renders
 // post cards built with buildPostCardHtml needs its container id listed
-// here. Currently: the main feed, the Profile screen's Posts tab, and
-// another user's profile Posts tab (user-profile-posts-container) — this
-// last one was missing, which silently dropped comment/like/menu clicks
-// on any post viewed from someone else's profile page.
-const postCardContainerIds = ['feed-posts-container', 'profile-posts-container', 'user-profile-posts-container'];
+// here. Currently: the main feed, the Profile screen's Posts tab,
+// another user's profile Posts tab (user-profile-posts-container), and
+// the Posts facet of global search (search-posts-container) — so a post
+// found via search gets real like/comment/menu/profile-nav behavior
+// instead of a read-only preview.
+const postCardContainerIds = ['feed-posts-container', 'profile-posts-container', 'user-profile-posts-container', 'search-posts-container'];
 
-// Delegated click listener for "Read more" expansion
+// Delegated click listener for "See more" / "See less" toggling. The
+// feed only ever renders a truncated preview for long posts (see
+// buildPostCardHtml in feed.js); expanding swaps in the full text from
+// the post card's data-post-content, and collapsing swaps back to the
+// preview stashed on the button's data-preview-text (so it doesn't need
+// to be recomputed client-side). Assigning to .textContent (not
+// .innerHTML) is what keeps this safe - the browser escapes it, so no
+// re-escaping of the already-unescaped dataset values is needed.
 postCardContainerIds.forEach(function(containerId) {
 	const container = document.getElementById(containerId);
 	if (!container) return;
 	container.addEventListener('click', function(e) {
 		const readMoreBtn = e.target.closest('.read-more-btn');
 		if (!readMoreBtn) return;
-		const contentEl = readMoreBtn.closest('.post-content');
-		if (!contentEl) return;
-		contentEl.classList.add('expanded');
-		readMoreBtn.remove();
+		const postCard = readMoreBtn.closest('article[data-post-id]');
+		const textEl = readMoreBtn.closest('.post-content') ? readMoreBtn.closest('.post-content').querySelector('.post-content-text') : null;
+		if (!postCard || !textEl) return;
+
+		const isExpanded = readMoreBtn.dataset.expanded === 'true';
+		if (isExpanded) {
+			textEl.textContent = readMoreBtn.dataset.previewText;
+			readMoreBtn.textContent = 'See more\u2026';
+			readMoreBtn.dataset.expanded = 'false';
+		} else {
+			textEl.textContent = postCard.dataset.postContent;
+			// "See less" only labels the collapse for posts over 100
+			// words (see showSeeLess in buildPostCardHtml) - shorter
+			// long posts still collapse on tap, just via an unlabeled button.
+			readMoreBtn.textContent = readMoreBtn.dataset.showSeeLess === 'true' ? 'See less' : '';
+			readMoreBtn.dataset.expanded = 'true';
+		}
 	});
 });
 
@@ -56,6 +77,33 @@ postCardContainerIds.forEach(function(containerId) {
 	});
 });
 
+// Reads a post card's data-* attributes back into the plain object shape
+// openCommentOverlay expects. Shared by every entry point into the detail
+// screen (comment button, tapping the post's image) so they all open the
+// exact same view with the exact same data, rather than each building its
+// own slightly-different payload.
+function getPostDataFromCard(postCard) {
+	let images = [];
+	try {
+		images = JSON.parse(postCard.dataset.postImages || '[]');
+	} catch (e) {
+		images = [];
+	}
+	return {
+		id: postCard.dataset.postId,
+		user_id: postCard.dataset.postUserId,
+		author_name: postCard.dataset.postAuthorName,
+		author_handle: postCard.dataset.postAuthorHandle,
+		author_avatar: postCard.dataset.postAuthorAvatar || null,
+		content: postCard.dataset.postContent,
+		created_at: postCard.dataset.postCreatedAt,
+		like_count: postCard.dataset.postLikeCount,
+		comment_count: postCard.dataset.postCommentCount,
+		liked_by_user: postCard.dataset.postLiked === 'true',
+		images: images
+	};
+}
+
 // Delegated click listener for comment buttons
 postCardContainerIds.forEach(function(containerId) {
 	const container = document.getElementById(containerId);
@@ -67,30 +115,58 @@ postCardContainerIds.forEach(function(containerId) {
 		const postCard = commentBtn.closest('article[data-post-id]');
 		if (!postCard) return;
 
-		const postId = postCard.dataset.postId;
+		openCommentOverlay(getPostDataFromCard(postCard));
+	});
+});
+
+// Delegated click listener for tapping a post's image(s): opens the
+// dedicated image-only viewer (see openImageViewer in feed.js), not the
+// Post/comments overlay - the Comment button below is the only entry point
+// into that screen now.
+postCardContainerIds.forEach(function(containerId) {
+	const container = document.getElementById(containerId);
+	if (!container) return;
+	container.addEventListener('click', function(e) {
+		const tappedImg = e.target.closest('.post-card-images img');
+		if (!tappedImg) return;
+
+		const postCard = tappedImg.closest('article[data-post-id]');
+		if (!postCard) return;
+
 		let images = [];
 		try {
 			images = JSON.parse(postCard.dataset.postImages || '[]');
-		} catch (e) {
+		} catch (err) {
 			images = [];
 		}
-		const postData = {
-			id: postId,
-			user_id: postCard.dataset.postUserId,
-			author_name: postCard.dataset.postAuthorName,
-			author_handle: postCard.dataset.postAuthorHandle,
-			author_avatar: postCard.dataset.postAuthorAvatar || null,
-			content: postCard.dataset.postContent,
-			created_at: postCard.dataset.postCreatedAt,
-			like_count: postCard.dataset.postLikeCount,
-			comment_count: postCard.dataset.postCommentCount,
-			liked_by_user: postCard.dataset.postLiked === 'true',
-			images: images
-		};
+		if (images.length === 0) return;
 
-		openCommentOverlay(postData);
+		const startIndex = parseInt(tappedImg.dataset.imageIndex, 10) || 0;
+		openImageViewer(images, startIndex);
 	});
 });
+
+// Same tap-to-open-viewer behavior for the comment overlay's own post image
+// block (#overlay-post-images, populated via buildPostImagesHtml in
+// openCommentOverlay - same markup/classes as a feed card's images, just
+// not one of the postCardContainerIds list above since it's a single fixed
+// element rather than a list of post cards). Attached once here rather than
+// inside openCommentOverlay so it doesn't get re-bound (and stack up
+// duplicate handlers) every time the overlay opens.
+(function() {
+	const overlayImages = document.getElementById('overlay-post-images');
+	if (!overlayImages) return;
+	overlayImages.addEventListener('click', function(e) {
+		const tappedImg = e.target.closest('img');
+		if (!tappedImg) return;
+
+		const images = Array.from(overlayImages.querySelectorAll('img')).map(img => img.src);
+		if (images.length === 0) return;
+
+		const startIndex = parseInt(tappedImg.dataset.imageIndex, 10) || 0;
+		openImageViewer(images, startIndex);
+	});
+})();
 
 // Delegated click listener for post like buttons
 postCardContainerIds.forEach(function(containerId) {
@@ -240,6 +316,7 @@ function openCommentOverlay(postData) {
 	document.getElementById('overlay-post-avatar').src = avatarUrl;
 	document.getElementById('overlay-post-author').textContent = postData.author_name;
 	document.getElementById('overlay-post-handle').textContent = `@${postData.author_handle}`;
+	loadOverlayPostFollowState(postData.user_id);
 
 	const overlayImages = document.getElementById('overlay-post-images');
 	const imagesHtml = buildPostImagesHtml(postData.images);
@@ -278,6 +355,12 @@ function openCommentOverlay(postData) {
 	overlay.classList.remove('hidden');
 	document.body.classList.add('overlay-open');
 
+	// Reset scroll position: post + comments now share one scroll region
+	// (see .overlay-replies-section), so a previous post's scroll offset
+	// would otherwise carry over and open this post already scrolled down.
+	const scrollArea = document.querySelector('#comment-overlay .overlay-replies-section');
+	if (scrollArea) scrollArea.scrollTop = 0;
+
 	// Show loading state
 	document.getElementById('overlay-loading').classList.remove('hidden');
 	document.getElementById('overlay-empty').classList.add('hidden');
@@ -289,8 +372,127 @@ function openCommentOverlay(postData) {
 	cancelReplyContext();
 	updateReplyComposerState();
 
+	// Reset collapsed-thread state so a thread left collapsed on a
+	// previously-viewed post doesn't render collapsed here too.
+	collapsedCommentIds.clear();
+
 	// Fetch comments
 	fetchComments(postData.id);
+}
+
+// Own posts never show a follow button - mirrors the self-check in
+// openProfileFromPostCard, which routes taps on your own author info to
+// the own-profile screen instead of the other-user one.
+//
+// For everyone else: the button only ever appears in the "not following"
+// state. Once the viewer follows an author, every post of theirs -
+// including ones opened after this one, with no refresh - shows no follow
+// control at all, matching the common feed pattern of the control
+// disappearing once it's no longer actionable. The one exception is the
+// post the viewer just tapped Follow on, which stays visible as
+// "Following" for that overlay session as a one-off tap confirmation -
+// see toggleOverlayPostFollow.
+function loadOverlayPostFollowState(authorId) {
+	const btn = document.getElementById('overlay-post-follow-btn');
+	if (!btn) return;
+
+	btn.classList.add('hidden');
+
+	if (!authorId || (session && session.user && String(authorId) === String(session.user.id))) {
+		return;
+	}
+
+	// Reuses the same per-user relationship cache profile-user.js populates,
+	// so a follow/unfollow made on the profile screen or a previous post's
+	// overlay is already reflected here with no extra fetch.
+	const cached = getCachedRelationship(authorId);
+	if (cached) {
+		if (!cached.following) {
+			updateOverlayPostFollowButton(false);
+			btn.classList.remove('hidden');
+		}
+		return;
+	}
+
+	// Uncached: stays hidden until the authoritative fetch resolves, rather
+	// than optimistically flashing "Follow" and then disappearing - a
+	// visible-then-hidden flicker would misrepresent an already-followed
+	// author as followable for a moment.
+	fetch(`/api/users/${authorId}`)
+		.then(response => response.ok ? response.json() : null)
+		.then(profile => {
+			if (!profile) return;
+			// Stale guard: don't paint onto a different post's overlay if
+			// the user has already navigated on before this resolves.
+			if (String(currentPostAuthorId) !== String(authorId)) return;
+			setCachedRelationship(authorId, {
+				following: !!profile.is_following,
+				followerCount: profile.follower_count,
+				followingCount: profile.following_count
+			});
+			if (!profile.is_following) {
+				updateOverlayPostFollowButton(false);
+				btn.classList.remove('hidden');
+			}
+		})
+		.catch(error => console.error('Error loading overlay follow state:', error));
+}
+
+async function toggleOverlayPostFollow() {
+	const authorId = currentPostAuthorId;
+	if (!authorId) return;
+
+	const btn = document.getElementById('overlay-post-follow-btn');
+	if (btn) btn.disabled = true;
+
+	try {
+		const response = await apiFetch(`/api/users/${authorId}/follow`, { method: 'POST' });
+		const data = await response.json().catch(() => null);
+
+		if (!response.ok) {
+			throw new Error((data && data.error) || 'Follow request failed');
+		}
+
+		setCachedRelationship(authorId, {
+			following: data.following,
+			followerCount: data.follower_count
+		});
+
+		if (String(currentPostAuthorId) === String(authorId)) {
+			// Follow -> visible "Following" confirmation on this post's
+			// overlay only; a later post from this author reads the cache
+			// entry just set above via loadOverlayPostFollowState and stays
+			// hidden instead. Unfollow -> visible "Follow" again, since it's
+			// actionable once more.
+			updateOverlayPostFollowButton(data.following);
+			btn.classList.remove('hidden');
+		}
+	} catch (error) {
+		console.error('Error toggling follow:', error);
+		showToast(error.message || "Couldn't update follow status. Try again.");
+	} finally {
+		if (btn) btn.disabled = false;
+	}
+}
+
+function updateOverlayPostFollowButton(following) {
+	const btn = document.getElementById('overlay-post-follow-btn');
+	const label = document.getElementById('overlay-post-follow-label');
+	const icon = btn ? btn.querySelector('i') : null;
+	if (!btn || !label) return;
+
+	btn.dataset.following = String(following);
+	if (following) {
+		label.textContent = 'Following';
+		if (icon) icon.className = 'fa-solid fa-check text-[11px]';
+		btn.classList.remove('bg-gray-900', 'border-gray-900', 'text-white', 'hover:bg-gray-800');
+		btn.classList.add('bg-white', 'border-gray-300', 'text-gray-900', 'hover:bg-gray-50');
+	} else {
+		label.textContent = 'Follow';
+		if (icon) icon.className = 'fa-solid fa-plus text-[11px]';
+		btn.classList.remove('bg-white', 'border-gray-300', 'text-gray-900', 'hover:bg-gray-50');
+		btn.classList.add('bg-gray-900', 'border-gray-900', 'text-white', 'hover:bg-gray-800');
+	}
 }
 
 function closeCommentOverlay() {
@@ -475,6 +677,22 @@ document.getElementById('overlay-reply-input').addEventListener('focus', functio
 	setTimeout(() => input.scrollIntoView({ block: 'nearest' }), 300);
 });
 
+// Raw comments for the currently-open post, kept around so switching sort
+// order (Relevant/Oldest/Newest) is a client-side re-render instead of a
+// refetch — the backend returns every comment for a post in one response,
+// so we already have everything we need locally.
+let currentPostComments = [];
+let currentCommentSort = 'relevant';
+
+// Which comment threads currently have their replies collapsed, keyed by
+// comment id (string). Survives sort switches and comment inserts/deletes
+// within the same post (those re-render or patch the DOM, and this set is
+// what renderCommentNode/insertNewCommentIntoDom check to decide whether a
+// given thread's .comment-children should render open or closed) - cleared
+// per-post in openCommentOverlay so a collapsed thread on one post doesn't
+// carry over into the next post opened.
+let collapsedCommentIds = new Set();
+
 async function fetchComments(postId) {
 	try {
 		const response = await fetch(`/api/posts/${postId}/comments`);
@@ -484,17 +702,18 @@ async function fetchComments(postId) {
 		}
 
 		const comments = await response.json();
+		currentPostComments = comments;
 
 		// Hide loading
 		document.getElementById('overlay-loading').classList.add('hidden');
 
-		// Update heading
-		document.getElementById('overlay-replies-heading').textContent = `Replies (${comments.length})`;
+		// Update count badge
+		document.getElementById('overlay-comments-count-badge').textContent = comments.length;
 
 		if (comments.length === 0) {
 			document.getElementById('overlay-empty').classList.remove('hidden');
 		} else {
-			renderComments(comments);
+			applyCommentSort(currentCommentSort);
 		}
 
 	} catch (error) {
@@ -517,68 +736,124 @@ async function fetchComments(postId) {
 // in isCurrentUserCommentOwner(). If the field is absent from the API
 // response, ownership just evaluates false and only Report shows — no crash.
 //
-// isReply/parentHandle come from the caller's tree-walk (buildCommentTree),
-// not from the comment object itself: parent_comment_id can point arbitrarily
-// deep (reply-to-a-reply is valid data), but indentation is intentionally
-// capped at one visual level so long chains don't run the layout off-screen.
-// data-parent-comment-id still carries the real (uncapped) parent id.
-function buildCommentHtml(comment, isReply, parentHandle) {
+// Renders one comment node plus (recursively) its own replies nested inside
+// a .comment-children wrapper - true depth-based nesting rather than a
+// flattened, single-indent-level list, so a reply-to-a-reply visually
+// stair-steps further right under its actual parent instead of collapsing
+// back to one level. The connecting line is drawn in two pieces (see
+// style.css): a straight "spine" (.thread-connector / .comment-children's
+// left border) that runs for as long as a thread has descendants, and one
+// "elbow" per parent→children transition (.comment-children::before) that
+// bends the spine rightward into the first child's avatar - mirroring the
+// "spine + elbow" connector pattern used by open-source nested-comment
+// implementations (e.g. TryGhost/Ghost's comments-ui and the
+// react-native-nested-comments-with-lines project) rather than a flat
+// "Replying to @handle" label, which nesting makes redundant.
+// Markup for a thread's collapse/expand chevron - only rendered when the
+// comment actually has children. Icon-only (no "N replies" label - that
+// count now lives next to the reply icon instead, see renderCommentNode).
+// Shared between the initial recursive render (renderCommentNode) and the
+// incremental insert path (insertNewCommentIntoDom / setReplyToggleCount)
+// so the two can't drift out of sync.
+function buildRepliesToggleHtml(comment, childCount, isCollapsed) {
+	if (childCount <= 0) return '';
+	return `<button type="button" class="comment-replies-toggle comment-action-btn text-gray-500 hover:text-gray-700 focus:outline-none${isCollapsed ? ' is-collapsed' : ''}" data-comment-id="${comment.id}" aria-expanded="${isCollapsed ? 'false' : 'true'}" aria-label="${isCollapsed ? 'Expand replies' : 'Collapse replies'}">
+			<i class="fa-solid fa-chevron-down text-[11px] replies-toggle-chevron"></i>
+		</button>`;
+}
+
+// Total reply count for a comment's own subtree, counting every descendant
+// (replies to replies, arbitrarily deep) rather than just direct children -
+// this is what the "N replies" toggle displays, so replying several levels
+// deep is reflected in every ancestor's count, not only its immediate
+// parent's.
+function countAllReplies(node) {
+	return node.children.reduce(function(sum, child) {
+		return sum + 1 + countAllReplies(child);
+	}, 0);
+}
+
+function renderCommentNode(node, depth) {
+	const comment = node.comment;
+	const hasChildren = node.children.length > 0;
+	const isCollapsed = hasChildren && collapsedCommentIds.has(String(comment.id));
 	const avatarUrl = comment.author_avatar || `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(comment.author_handle)}`;
 	const timeAgo = formatTimeAgo(comment.created_at);
 	const likedClass = comment.liked_by_user ? 'text-brand-red' : 'text-gray-500';
+	const dislikedClass = comment.disliked_by_user ? 'text-gray-900' : 'text-gray-500';
 	const authorUserId = comment.user_id !== undefined && comment.user_id !== null ? String(comment.user_id) : '';
 	const parentCommentId = comment.parent_comment_id !== undefined && comment.parent_comment_id !== null ? String(comment.parent_comment_id) : '';
 
-	const rowIndentClass = isReply ? 'ml-10 pl-3 border-l-2 border-gray-100' : '';
-	const replyingToLine = isReply && parentHandle
-		? `<div class="text-[13px] text-gray-400 mb-1">Replying to @${escapeHtml(parentHandle)}</div>`
+	const connectorBar = hasChildren ? '<div class="thread-connector"></div>' : '';
+	const totalReplies = countAllReplies(node);
+	const repliesToggleHtml = buildRepliesToggleHtml(comment, totalReplies, isCollapsed);
+	const childrenHtml = hasChildren
+		? `<div class="comment-children${isCollapsed ? ' collapsed' : ''}">${node.children.map(function(child) { return renderCommentNode(child, depth + 1); }).join('')}</div>`
 		: '';
 
 	return `
-	<div class="pb-5 mb-5 border-b border-gray-100 flex gap-3 last:border-b-0 ${rowIndentClass}" data-comment-id="${comment.id}" data-comment-user-id="${escapeHtml(authorUserId)}" data-comment-author-handle="${escapeHtml(comment.author_handle)}" data-parent-comment-id="${escapeHtml(parentCommentId)}">
-		<img alt="${escapeHtml(comment.author_name)}" class="w-12 h-12 rounded-full object-cover shrink-0" src="${avatarUrl}"/>
-		<div class="flex-1 min-w-0">
-			<div class="flex items-start justify-between gap-2">
-				<div class="flex items-baseline gap-1.5 mb-1 flex-wrap">
-					<span class="font-bold text-[16px]">${escapeHtml(comment.author_name)}</span>
-					<span class="text-[14px] text-gray-500">@${escapeHtml(comment.author_handle)} · ${escapeHtml(timeAgo)}</span>
-				</div>
-				<button type="button" class="comment-menu-btn p-1 -mr-1 -mt-1 text-gray-400 hover:text-gray-600 focus:outline-none shrink-0" aria-label="Comment options">
-					<i class="fa-solid fa-ellipsis-vertical text-[14px]"></i>
-				</button>
+	<article class="comment-thread" data-depth="${depth}">
+		<div class="comment-row" data-comment-id="${comment.id}" data-comment-user-id="${escapeHtml(authorUserId)}" data-comment-author-handle="${escapeHtml(comment.author_handle)}" data-parent-comment-id="${escapeHtml(parentCommentId)}">
+			<div class="thread-avatar-col shrink-0">
+				<img alt="${escapeHtml(comment.author_name)}" class="comment-avatar rounded-full object-cover shrink-0" src="${avatarUrl}"/>
+				${connectorBar}
 			</div>
-			${replyingToLine}
-			<p class="text-[16px] leading-[1.4] text-gray-800 mb-3">${escapeHtml(comment.content)}</p>
-			<div class="flex items-center gap-5 text-gray-500">
-				<button class="like-btn-comment flex items-center gap-1.5 focus:outline-none group transition-colors" data-comment-id="${comment.id}" data-liked="${comment.liked_by_user}">
-					<span class="like-icon-wrapper">
-						<svg class="w-5 h-5 ${likedClass} heart-outline" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-							<path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" stroke-linecap="round" stroke-linejoin="round"></path>
-						</svg>
-						<svg class="w-5 h-5 text-brand-red heart-filled absolute inset-0" fill="currentColor" stroke="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-							<path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"></path>
-						</svg>
-					</span>
-					<span class="text-[14px] like-count ${likedClass}">${comment.like_count}</span>
-				</button>
-				<button type="button" class="comment-reply-btn flex items-center gap-1.5 text-gray-500 hover:text-gray-700 focus:outline-none">
-					<i class="fa-solid fa-reply text-[13px]"></i>
-					<span class="text-[14px] font-medium">Reply</span>
-				</button>
+			<div class="flex-1 min-w-0">
+				<div class="flex items-start justify-between gap-2">
+					<div class="flex items-baseline gap-1.5 mb-0.5 flex-wrap">
+						<span class="font-bold text-[13px] text-gray-900">${escapeHtml(comment.author_name)}</span>
+						<span class="text-[13px] text-gray-500">@${escapeHtml(comment.author_handle)} · ${escapeHtml(timeAgo)}</span>
+					</div>
+					<button type="button" class="comment-menu-btn p-1 -mr-1 -mt-1 text-gray-400 hover:text-gray-600 focus:outline-none shrink-0" aria-label="Comment options">
+						<i class="fa-solid fa-ellipsis-vertical text-[14px]"></i>
+					</button>
+				</div>
+				<p class="text-[15px] leading-[1.4] text-gray-800 mb-2.5">${escapeHtml(comment.content)}</p>
+				<div class="comment-actions">
+					<button type="button" class="comment-reply-btn comment-action-btn text-gray-500 hover:text-gray-700 focus:outline-none" aria-label="Reply">
+						<i class="fa-regular fa-comment text-[15px]"></i>
+						<span class="text-[13px] reply-count">${totalReplies}</span>
+					</button>
+					<button class="like-btn-comment comment-action-btn focus:outline-none group transition-colors" data-comment-id="${comment.id}" data-liked="${comment.liked_by_user}">
+						<span class="like-icon-wrapper">
+							<svg class="w-[18px] h-[18px] ${likedClass} heart-outline" fill="none" stroke="currentColor" stroke-width="1.75" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+								<path d="M7 22h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14V5a3 3 0 0 0-3-3l-4 9v11z" stroke-linecap="round" stroke-linejoin="round"></path>
+								<path d="M7 11H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" stroke-linecap="round" stroke-linejoin="round"></path>
+							</svg>
+							<svg class="w-[18px] h-[18px] text-brand-red heart-filled absolute inset-0" fill="currentColor" stroke="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+								<path d="M7 22h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14V5a3 3 0 0 0-3-3l-4 9v11z"></path>
+								<path d="M7 11H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>
+							</svg>
+						</span>
+						<span class="text-[13px] like-count ${likedClass}">${comment.like_count}</span>
+					</button>
+					<button class="dislike-btn-comment comment-action-btn focus:outline-none group transition-colors" data-comment-id="${comment.id}" data-disliked="${comment.disliked_by_user ? true : false}">
+						<span class="dislike-icon-wrapper">
+							<svg class="w-[18px] h-[18px] ${dislikedClass} thumb-down-outline" fill="none" stroke="currentColor" stroke-width="1.75" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+								<path d="M17 2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10v5a3 3 0 0 0 3 3l4-9V2z" stroke-linecap="round" stroke-linejoin="round"></path>
+								<path d="M17 13h3a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3" stroke-linecap="round" stroke-linejoin="round"></path>
+							</svg>
+							<svg class="w-[18px] h-[18px] text-gray-900 thumb-down-filled absolute inset-0" fill="currentColor" stroke="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+								<path d="M17 2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10v5a3 3 0 0 0 3 3l4-9V2z"></path>
+								<path d="M17 13h3a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3"></path>
+							</svg>
+						</span>
+					</button>
+					${repliesToggleHtml}
+				</div>
 			</div>
 		</div>
-	</div>`;
+		${childrenHtml}
+	</article>`;
 }
 
-// Flattens the parent_comment_id graph into render order: each top-level
-// comment immediately followed by its full descendant chain (depth-first,
-// chronological within each parent), so replies always sit directly under
-// the comment they were made on rather than at the bottom of the list.
-// Returns [{ comment, isReply, parentHandle }, ...].
-function buildCommentRenderList(comments) {
-	const byId = {};
-	comments.forEach(function(c) { byId[c.id] = c; });
-
+// Builds a real parent/children tree out of the flat comments array
+// (parent_comment_id can point arbitrarily deep - a reply to a reply is
+// valid data). Root order follows the order roots appear in `comments`
+// (so callers can pre-sort top-level comments before calling this - see
+// renderComments/sortTopLevelComments); each parent's children stay in
+// their original chronological order regardless of that top-level sort.
+function buildCommentTree(comments) {
 	const childrenByParent = {};
 	comments.forEach(function(c) {
 		const key = c.parent_comment_id != null ? String(c.parent_comment_id) : 'root';
@@ -586,59 +861,196 @@ function buildCommentRenderList(comments) {
 		childrenByParent[key].push(c);
 	});
 
-	const output = [];
-	function walk(key) {
-		(childrenByParent[key] || []).forEach(function(c) {
-			const parent = key !== 'root' ? byId[key] : null;
-			output.push({
-				comment: c,
-				isReply: !!parent,
-				parentHandle: parent ? parent.author_handle : null
-			});
-			walk(String(c.id));
-		});
+	function buildNode(comment) {
+		const kids = childrenByParent[String(comment.id)] || [];
+		return { comment: comment, children: kids.map(buildNode) };
 	}
-	walk('root');
-	return output;
+
+	return (childrenByParent['root'] || []).map(buildNode);
 }
 
 function renderComments(comments) {
 	const container = document.getElementById('overlay-comments-container');
-	container.innerHTML = buildCommentRenderList(comments)
-		.map(function(node) { return buildCommentHtml(node.comment, node.isReply, node.parentHandle); })
+	container.innerHTML = buildCommentTree(comments)
+		.map(function(node) { return renderCommentNode(node, 0); })
 		.join('');
 }
 
-// Inserts a freshly-posted comment/reply into the already-rendered list
-// without a full refetch. Top-level comments append to the end (matches
-// ASC sort order). Replies are placed directly after the last existing row
-// belonging to the same parent chain (or after the parent itself if it has
-// no visible replies yet), so the thread stays visually grouped.
-function insertNewCommentIntoDom(comment, parentCommentId, parentHandle) {
-	const container = document.getElementById('overlay-comments-container');
 
-	if (!parentCommentId) {
-		container.insertAdjacentHTML('beforeend', buildCommentHtml(comment, false, null));
-		return;
-	}
+// ---- Comment sort (Relevant / Newest) ----
+// Client-side only: every comment for a post is already fetched in one
+// request (see fetchComments), so switching sort order just reorders the
+// cached array and re-renders — no network round trip needed.
+//
+// Only top-level comments are reordered by the chosen strategy; each
+// comment's own replies stay attached to it and in chronological order,
+// same as before sorting existed. "Relevant" has no real relevance signal
+// on the backend yet, so it's approximated as most-liked-first (ties
+// broken oldest-first) — a reasonable stand-in until/unless a real
+// relevance ranking exists server-side.
+function sortTopLevelComments(comments, sortKey) {
+	const topLevel = comments.filter(function(c) { return c.parent_comment_id == null; });
+	const replies = comments.filter(function(c) { return c.parent_comment_id != null; });
 
-	const html = buildCommentHtml(comment, true, parentHandle);
-	const existingReplies = container.querySelectorAll(`[data-parent-comment-id="${parentCommentId}"]`);
-
-	if (existingReplies.length > 0) {
-		existingReplies[existingReplies.length - 1].insertAdjacentHTML('afterend', html);
-		return;
-	}
-
-	const parentRow = container.querySelector(`[data-comment-id="${parentCommentId}"]`);
-	if (parentRow) {
-		parentRow.insertAdjacentHTML('afterend', html);
+	let sortedTop;
+	if (sortKey === 'newest') {
+		sortedTop = topLevel.slice().sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
 	} else {
-		// Parent row not found (shouldn't happen — its Reply button is what
-		// set parentCommentId). Fall back to appending so the comment isn't lost.
-		container.insertAdjacentHTML('beforeend', html);
+		sortedTop = topLevel.slice().sort(function(a, b) {
+			return (b.like_count - a.like_count) || (new Date(a.created_at) - new Date(b.created_at));
+		});
+	}
+
+	// buildCommentTree only cares about each root comment's position
+	// relative to other roots (replies are grouped by parent_comment_id
+	// regardless of array order), so appending replies after is enough to
+	// preserve their existing grouping/order under the newly-ordered roots.
+	return sortedTop.concat(replies);
+}
+
+function applyCommentSort(sortKey) {
+	currentCommentSort = sortKey;
+	updateCommentSortMenuUI();
+	renderComments(sortTopLevelComments(currentPostComments, sortKey));
+}
+
+const COMMENT_SORT_LABELS = { relevant: 'Relevant', newest: 'Newest' };
+
+function updateCommentSortMenuUI() {
+	document.querySelectorAll('.comment-sort-option').forEach(function(btn) {
+		const isSelected = btn.dataset.sort === currentCommentSort;
+		btn.querySelector('.comment-sort-check').classList.toggle('hidden', !isSelected);
+		btn.classList.toggle('bg-gray-50', isSelected);
+	});
+	const label = document.getElementById('comments-sort-label');
+	if (label) label.textContent = COMMENT_SORT_LABELS[currentCommentSort] || 'Relevant';
+}
+
+function toggleCommentSortMenu() {
+	const menu = document.getElementById('comments-sort-menu');
+	if (menu.classList.contains('hidden')) {
+		openCommentSortMenu();
+	} else {
+		closeCommentSortMenu();
 	}
 }
+
+function openCommentSortMenu() {
+	document.getElementById('comments-sort-menu').classList.remove('hidden');
+	document.getElementById('comments-sort-backdrop').classList.remove('hidden');
+	document.getElementById('comments-sort-chevron').classList.add('rotate-180');
+	document.getElementById('comments-sort-trigger').setAttribute('aria-expanded', 'true');
+}
+
+function closeCommentSortMenu() {
+	document.getElementById('comments-sort-menu').classList.add('hidden');
+	document.getElementById('comments-sort-backdrop').classList.add('hidden');
+	document.getElementById('comments-sort-chevron').classList.remove('rotate-180');
+	document.getElementById('comments-sort-trigger').setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+	document.querySelectorAll('.comment-sort-option').forEach(function(btn) {
+		btn.addEventListener('click', function() {
+			applyCommentSort(btn.dataset.sort);
+			closeCommentSortMenu();
+		});
+	});
+});
+
+// Inserts a freshly-posted comment/reply into the already-rendered tree
+// without a full refetch. Top-level comments append as a new root thread.
+// Replies are appended into their parent's .comment-children wrapper,
+// creating that wrapper (and the parent's connector bar) if this is the
+// parent's first reply.
+function insertNewCommentIntoDom(comment, parentCommentId) {
+	const container = document.getElementById('overlay-comments-container');
+	const node = { comment: comment, children: [] };
+
+	if (!parentCommentId) {
+		container.insertAdjacentHTML('beforeend', renderCommentNode(node, 0));
+		return;
+	}
+
+	const parentRow = container.querySelector(`.comment-row[data-comment-id="${parentCommentId}"]`);
+	const parentThread = parentRow ? parentRow.closest('.comment-thread') : null;
+
+	if (!parentThread) {
+		// Parent thread not found (shouldn't happen — its Reply button is
+		// what set parentCommentId). Fall back to a new root so the comment
+		// isn't lost.
+		container.insertAdjacentHTML('beforeend', renderCommentNode(node, 0));
+		return;
+	}
+
+	const parentDepth = parseInt(parentThread.dataset.depth || '0', 10);
+	const html = renderCommentNode(node, parentDepth + 1);
+
+	let childrenWrap = parentThread.querySelector(':scope > .comment-children');
+	if (!childrenWrap) {
+		parentThread.insertAdjacentHTML('beforeend', '<div class="comment-children"></div>');
+		childrenWrap = parentThread.querySelector(':scope > .comment-children');
+		const avatarCol = parentRow.querySelector('.thread-avatar-col');
+		if (avatarCol && !avatarCol.querySelector('.thread-connector')) {
+			avatarCol.insertAdjacentHTML('beforeend', '<div class="thread-connector"></div>');
+		}
+	}
+	childrenWrap.insertAdjacentHTML('beforeend', html);
+
+	// Un-collapse the immediate parent's thread so the just-posted reply is
+	// visible right away, rather than landing inside a collapsed subtree.
+	// (Ancestors further up are left as-is - only the thread actually
+	// replied into force-expands.)
+	childrenWrap.classList.remove('collapsed');
+	collapsedCommentIds.delete(String(parentCommentId));
+	const parentToggleBtn = parentRow.querySelector('.comment-replies-toggle');
+	if (parentToggleBtn) {
+		parentToggleBtn.classList.remove('is-collapsed');
+		parentToggleBtn.setAttribute('aria-expanded', 'true');
+	}
+
+	updateReplyCountsUpChain(parentThread);
+}
+
+// Updates a single comment row's reply count (shown on the reply icon,
+// always - 0 included, same convention as the like counter next to it) and
+// makes sure the collapse/expand chevron exists once totalCount is above
+// zero. The chevron itself carries no label anymore, so there's no text to
+// keep in sync there - only whether it exists.
+function setReplyToggleCount(row, commentId, totalCount) {
+	const replyCountSpan = row.querySelector('.comment-reply-btn .reply-count');
+	if (replyCountSpan) replyCountSpan.textContent = totalCount;
+
+	if (totalCount <= 0) return;
+	const actionsRow = row.querySelector('.comment-actions');
+	if (!actionsRow) return;
+	if (!actionsRow.querySelector('.comment-replies-toggle')) {
+		actionsRow.insertAdjacentHTML('beforeend', buildRepliesToggleHtml({ id: commentId }, totalCount, false));
+	}
+}
+
+// Walks from the directly-replied-to comment's thread up through every
+// ancestor thread, recomputing each one's total (recursive) reply count
+// straight from the live DOM and syncing its toggle. A reply nested several
+// levels deep raises the total shown on every comment above it, not just
+// its immediate parent, so a single-level increment isn't enough here.
+function updateReplyCountsUpChain(startThread) {
+	let thread = startThread;
+	while (thread) {
+		const row = thread.querySelector(':scope > .comment-row');
+		const childrenWrap = thread.querySelector(':scope > .comment-children');
+		const commentId = row ? row.dataset.commentId : null;
+		if (row && childrenWrap && commentId) {
+			const totalCount = childrenWrap.querySelectorAll('.comment-thread').length;
+			setReplyToggleCount(row, commentId, totalCount);
+		}
+		const wrap = thread.parentElement;
+		thread = (wrap && wrap.classList && wrap.classList.contains('comment-children'))
+			? wrap.closest('.comment-thread')
+			: null;
+	}
+}
+
 
 // GPA calculator iframe back button -> return to Courses
 window.addEventListener('message', (e) => {

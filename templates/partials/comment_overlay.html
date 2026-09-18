@@ -22,12 +22,13 @@
 <div id="comment-overlay" class="hidden fixed inset-0 z-50 bg-black/50" style="backdrop-filter: blur(4px);">
 	<div class="overlay-content w-full max-w-[430px] mx-auto bg-white flex flex-col">
 		<!-- Header -->
-		<header class="relative flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+		<header class="relative flex items-center gap-3 px-5 py-4 border-b border-gray-100 shrink-0">
 			<button id="close-overlay-btn" class="p-2 -ml-2 text-gray-900 focus:outline-none" aria-label="Close">
 				<svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 					<path d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" stroke-linecap="round" stroke-linejoin="round"></path>
 				</svg>
 			</button>
+			<h1 class="flex-1 text-[19px] font-bold text-gray-900">Post</h1>
 			<button id="overlay-menu-btn" aria-label="More options" aria-haspopup="true" aria-expanded="false" class="p-2 -mr-2 text-gray-900 focus:outline-none active:scale-95 transition-transform duration-100" onclick="toggleOverlayPostMenu()">
 				<svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 					<path d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -72,51 +73,111 @@
 			</div>
 		</header>
 
-		<!-- Original Post -->
-		<article id="overlay-post" class="px-5 pt-2 pb-6 border-b border-gray-100 shrink-0">
-			<!-- Author Info -->
-			<div class="flex items-center gap-3 mb-4">
-				<img id="overlay-post-avatar" alt="" class="w-12 h-12 rounded-full bg-gray-200 object-cover shrink-0" src=""/>
-				<div>
-					<h2 id="overlay-post-author" class="text-[17px] font-bold leading-tight"></h2>
-					<p id="overlay-post-handle" class="text-[15px] text-gray-500 mt-0.5"></p>
+		<!-- Single scroll region: post + comments header + reply list all
+		     scroll together as one continuous column (matches the reference -
+		     the post scrolls out of view along with everything below it,
+		     rather than being pinned in its own non-scrolling box while only
+		     the replies list scrolls independently underneath it). Only the
+		     top "Post" header and the bottom reply-input bar stay fixed. -->
+		<div class="flex-1 min-h-0 overlay-replies-section">
+			<!-- Original Post -->
+			<article id="overlay-post" class="px-5 pt-2 pb-6">
+				<!-- Author Info -->
+				<div class="flex items-center gap-3 mb-4">
+					<img id="overlay-post-avatar" alt="" class="w-12 h-12 rounded-full bg-gray-200 object-cover shrink-0" src=""/>
+					<div class="flex-1 min-w-0">
+						<h2 id="overlay-post-author" class="text-[17px] font-bold leading-tight"></h2>
+						<p id="overlay-post-handle" class="text-[15px] text-gray-500 mt-0.5"></p>
+					</div>
+					<button type="button" id="overlay-post-follow-btn" data-following="false" class="hidden shrink-0 h-8 pl-3 pr-3.5 rounded-full bg-gray-900 border border-gray-900 flex items-center justify-center gap-1.5 text-[13px] font-semibold text-white tracking-wide hover:bg-gray-800 transition-colors active:scale-[0.98] duration-100" onclick="toggleOverlayPostFollow()">
+						<i class="fa-solid fa-plus text-[11px]"></i>
+						<span id="overlay-post-follow-label">Follow</span>
+					</button>
 				</div>
-			</div>
-			<!-- Post Images -->
-			<div id="overlay-post-images" class="hidden"></div>
-			<!-- Post Content -->
-			<p id="overlay-post-content" class="text-[17px] leading-[1.6] text-gray-800 mb-4"></p>
-			<div class="flex items-center gap-1.5 text-gray-500 mb-4">
-				<svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-					<path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path>
-				</svg>
-				<span id="overlay-post-time" class="text-[15px]"></span>
-			</div>
-			<!-- Stats Row -->
-			<div class="flex items-center gap-6 text-gray-700">
-				<div class="flex items-center gap-2">
-					<span class="like-icon-wrapper">
-						<svg class="w-5 h-5 heart-outline" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-							<path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" stroke-linecap="round" stroke-linejoin="round"></path>
-						</svg>
-						<svg class="w-5 h-5 text-brand-red heart-filled absolute inset-0" fill="currentColor" stroke="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-							<path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"></path>
-						</svg>
-					</span>
-					<span id="overlay-post-likes" class="text-[15px] font-medium"></span>
-				</div>
-				<div class="flex items-center gap-2">
-					<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-						<path d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 01-.923 1.785A5.969 5.969 0 006 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337z" stroke-linecap="round" stroke-linejoin="round"></path>
+				<!-- Post Images -->
+				<div id="overlay-post-images" class="hidden"></div>
+				<!-- Post Content -->
+				<p id="overlay-post-content" class="text-[17px] leading-[1.6] text-gray-800 mb-4"></p>
+				<div class="flex items-center gap-1.5 text-gray-500 pb-4 mb-4">
+					<svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+						<path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path>
 					</svg>
-					<span id="overlay-post-comments" class="text-[15px] font-medium"></span>
+					<span id="overlay-post-time" class="text-[15px]"></span>
+				</div>
+				<!-- Stats Row - icons match the feed post-action row (feed.js):
+				     share (external-link square), comment (Bootstrap
+				     chat-square-dots), like (thumb-up). Kept in the same
+				     left-to-right order as the feed cards for consistency,
+				     and uses the same justify-between distribution +
+				     space-x-1.5 icon/label gap as post-actions-row so the
+				     bar reads identically to the feed. -->
+				<div class="flex items-center justify-between text-gray-700">
+					<div class="flex items-center space-x-1.5">
+						<svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.75" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+							<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke-linecap="round" stroke-linejoin="round"></path>
+							<polyline points="15 3 21 3 21 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+							<line x1="10" x2="21" y1="14" y2="3" stroke-linecap="round" stroke-linejoin="round"></line>
+						</svg>
+					</div>
+					<div class="flex items-center space-x-1.5">
+						<svg class="w-[19px] h-[19px]" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+							<path d="M20.5 4.75A2.75 2.75 0 0 0 17.75 2h-11.5A2.75 2.75 0 0 0 3.5 4.75v8.5A2.75 2.75 0 0 0 6.25 16h3.95l2.45 2.35a.5.5 0 0 0 .7 0L15.8 16h1.95a2.75 2.75 0 0 0 2.75-2.75v-8.5Z"/>
+							<circle cx="8" cy="9" r="1" fill="currentColor" stroke="none"/>
+							<circle cx="12" cy="9" r="1" fill="currentColor" stroke="none"/>
+							<circle cx="16" cy="9" r="1" fill="currentColor" stroke="none"/>
+						</svg>
+						<span id="overlay-post-comments" class="text-[15px] font-medium"></span>
+					</div>
+					<div class="flex items-center space-x-1.5">
+						<span class="like-icon-wrapper">
+							<svg class="w-5 h-5 heart-outline" fill="none" stroke="currentColor" stroke-width="1.75" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+								<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" stroke-linecap="round" stroke-linejoin="round"></path>
+							</svg>
+							<svg class="w-5 h-5 text-brand-red heart-filled absolute inset-0" fill="currentColor" stroke="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+								<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+							</svg>
+						</span>
+						<span id="overlay-post-likes" class="text-[15px] font-medium"></span>
+					</div>
+				</div>
+			</article>
+
+			<!-- Comments header: plain sub-header row (count + sort trigger).
+			     Scrolls with the rest of the content (no longer sticky) so
+			     the whole view behaves as one continuous scroll, matching
+			     the reference instead of pinning this row in place. -->
+			<div class="relative px-5 pt-4 pb-2.5">
+				<button type="button" id="comments-sort-trigger" onclick="toggleCommentSortMenu()" aria-haspopup="true" aria-expanded="false" class="comments-header-trigger w-full flex items-center justify-between py-2.5 focus:outline-none transition-colors">
+					<span class="flex items-baseline gap-1.5">
+						<span class="text-[16px] font-bold text-gray-900">Comments</span>
+						<span id="overlay-comments-count-badge" class="text-[14px] font-medium text-gray-500">0</span>
+					</span>
+					<span class="flex items-center gap-1.5 text-gray-500">
+						<span id="comments-sort-label" class="text-[13px] font-medium">Relevant</span>
+						<i id="comments-sort-chevron" class="fa-solid fa-chevron-down text-[11px] transition-transform duration-150"></i>
+					</span>
+				</button>
+
+				<!-- Sort dropdown: Relevant / Oldest / Newest. Sorting is client-side
+				     for now — all comments for a post are already fetched in one
+				     request, so re-sorting is just a re-render of the cached list
+				     (see applyCommentSort in comments.js). -->
+				<div id="comments-sort-backdrop" class="hidden fixed inset-0 z-40" onclick="closeCommentSortMenu()"></div>
+				<div id="comments-sort-menu" class="hidden absolute z-50 right-5 top-[calc(100%-4px)] bg-white rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.16)] border border-gray-100 py-1.5 w-40 origin-top-right">
+					<button type="button" class="comment-sort-option w-full flex items-center justify-between gap-2.5 px-4 py-2.5 text-left hover:bg-gray-50" data-sort="relevant">
+						<span class="flex items-center gap-2.5">
+							<span class="text-[14px] text-gray-800">Relevant</span>
+						</span>
+						<i class="fa-solid fa-check text-[12px] text-brand-red comment-sort-check hidden"></i>
+					</button>
+					<button type="button" class="comment-sort-option w-full flex items-center justify-between gap-2.5 px-4 py-2.5 text-left hover:bg-gray-50" data-sort="newest">
+						<span class="flex items-center gap-2.5">
+							<span class="text-[14px] text-gray-800">Newest</span>
+						</span>
+						<i class="fa-solid fa-check text-[12px] text-brand-red comment-sort-check hidden"></i>
+					</button>
 				</div>
 			</div>
-		</article>
-
-		<!-- Replies Section (scrollable) -->
-		<section class="flex-1 overlay-replies-section">
-			<h3 id="overlay-replies-heading" class="px-5 pt-6 pb-5 text-[17px] font-bold sticky top-0 bg-white">Replies (0)</h3>
 			<div id="overlay-replies-list" class="px-5 pb-4">
 				<!-- Loading state -->
 				<div id="overlay-loading" class="text-center py-8 text-gray-400">
@@ -135,7 +196,7 @@
 				<!-- Comments container -->
 				<div id="overlay-comments-container"></div>
 			</div>
-		</section>
+		</div>
 
 		<!-- Fixed Reply Input Bar -->
 		<div class="shrink-0 p-4 bg-white/95 backdrop-blur-md border-t border-gray-100">
@@ -150,7 +211,7 @@
 				</button>
 			</div>
 			<div class="relative flex items-center">
-				<input id="overlay-reply-input" class="w-full h-[52px] pl-5 pr-14 rounded-full border border-gray-200 bg-gray-50/50 text-[16px] focus:outline-none focus:border-brand-red focus:ring-1 focus:ring-brand-red transition-shadow" placeholder="Post a reply..." type="text" maxlength="1000"/>
+				<input id="overlay-reply-input" class="w-full h-[52px] pl-5 pr-14 rounded-full border border-gray-200 bg-gray-50/50 text-[16px] focus:outline-none focus:border-brand-red focus:ring-1 focus:ring-brand-red transition-shadow" placeholder="Post a comment..." type="text" maxlength="1000"/>
 				<button id="overlay-reply-send-btn" class="absolute right-1.5 w-[42px] h-[42px] bg-brand-red rounded-full flex items-center justify-center text-white focus:outline-none hover:bg-red-700 transition-colors disabled:opacity-40 disabled:pointer-events-none" disabled aria-disabled="true">
 					<svg id="overlay-reply-send-spinner" class="hidden w-5 h-5 animate-spin" fill="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
 						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

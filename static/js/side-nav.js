@@ -90,7 +90,9 @@ function applySideNavActiveState() {
 		'profile-view': 'profile',
 		'chat-view': 'chat',
 		'library-view': 'library',
-		'library-contribute-view': 'library'
+		'library-contribute-view': 'library',
+		'search-view': 'search',
+		'businesses-view': 'businesses'
 	};
 	const activeKey = activeView ? viewToKey[activeView.id] : null;
 
